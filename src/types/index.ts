@@ -54,12 +54,91 @@ export const SOLAR_TERMS: SolarTerm[] = [
   { key: 'dahan', name: '大寒', month: 1, day: 20 }
 ]
 
+export type SourceType = 'book' | 'paper' | 'website' | 'oral' | 'other'
+
+export type SourceReliability = 'high' | 'medium' | 'low'
+
+export const SOURCE_RELIABILITY_SCORE: Record<SourceReliability, number> = {
+  high: 90,
+  medium: 60,
+  low: 30
+}
+
+export const SOURCE_TYPE_RELIABILITY: Record<SourceType, SourceReliability> = {
+  book: 'high',
+  paper: 'high',
+  website: 'medium',
+  oral: 'low',
+  other: 'medium'
+}
+
+export interface ObservationData {
+  startDate: string
+  durationDays: number
+  type?: EventType
+}
+
+export interface SourceRecord {
+  id: string
+  sourceInfo: SourceInfo
+  observation: ObservationData
+  reliability: SourceReliability
+  reliabilityScore: number
+  recordedAt: number
+  recorder?: string
+  note?: string
+}
+
+export type VerificationStatus = 'unverified' | 'conflict' | 'verified'
+
+export interface ConflictDetail {
+  field: 'startDate' | 'durationDays' | 'type'
+  values: { sourceId: string; value: string | number }[]
+  maxDiff: number
+  severity: 'high' | 'medium' | 'low'
+}
+
+export interface ConflictAnalysis {
+  hasConflict: boolean
+  conflicts: ConflictDetail[]
+  overallSeverity: 'high' | 'medium' | 'low' | 'none'
+  consensusScore: number
+}
+
+export interface VersionSnapshot {
+  name: string
+  type: EventType
+  solarTerm: SolarTermKey
+  startDate: string
+  durationDays: number
+  sources: SourceRecord[]
+  verified: boolean
+  verificationStatus: VerificationStatus
+  description?: string
+}
+
+export type VersionAction = 'create' | 'edit' | 'move' | 'verify' | 'unverify' | 'add_source' | 'remove_source' | 'update_source'
+
+export interface VersionHistoryEntry {
+  id: string
+  version: number
+  action: VersionAction
+  description: string
+  timestamp: number
+  operator: string
+  before: VersionSnapshot | null
+  after: VersionSnapshot
+  diff: string[]
+}
+
 export interface SourceInfo {
   id: string
   name: string
-  type: 'book' | 'paper' | 'website' | 'oral' | 'other'
+  type: SourceType
   url?: string
   note?: string
+  publisher?: string
+  publishDate?: string
 }
 
 export interface PhenologyEvent {
@@ -71,9 +150,13 @@ export interface PhenologyEvent {
   durationDays: number
   regionId: string
   year: number
-  sources: SourceInfo[]
+  sources: SourceRecord[]
   verified: boolean
+  verificationStatus: VerificationStatus
+  conflictAnalysis?: ConflictAnalysis
   description?: string
+  versionHistory: VersionHistoryEntry[]
+  currentVersion: number
   createdAt: number
   updatedAt: number
 }

@@ -12,6 +12,14 @@
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.15" />
         </filter>
+        <filter id="conflictGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#ef4444" flood-opacity="0.6" />
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.2" />
+        </filter>
+        <filter id="verifiedGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#10b981" flood-opacity="0.3" />
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.15" />
+        </filter>
         <linearGradient id="discGradient" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#f8fafc" />
           <stop offset="100%" stop-color="#e2e8f0" />
@@ -74,12 +82,12 @@
       <g v-for="event in filteredEvents" :key="event.id">
         <path
           :d="getEventArcPath(event)"
-          :fill="getEventTypeColor(event.type)"
-          :stroke="selectedEventId === event.id ? '#1e293b' : 'transparent'"
-          stroke-width="2"
+          :fill="getEventFillColor(event)"
+          :stroke="getEventStrokeColor(event)"
+          :stroke-width="getEventStrokeWidth(event)"
           :opacity="getEventOpacity(event)"
           class="event-arc"
-          filter="url(#shadow)"
+          :filter="getEventFilter(event)"
           :style="{ cursor: isDragging ? 'grabbing' : 'grab' }"
           @mousedown="handleEventMouseDown($event, event.id)"
           @click.stop="handleEventClick(event.id)"
@@ -99,27 +107,25 @@
         >
           {{ truncateText(event.name, 8) }}
         </text>
-        <circle
-          v-if="event.verified"
-          :cx="getEventVerifiedBadgePosition(event).x"
-          :cy="getEventVerifiedBadgePosition(event).y"
-          r="6"
-          fill="#10b981"
-          pointer-events="none"
-        />
-        <text
-          v-if="event.verified"
-          :x="getEventVerifiedBadgePosition(event).x"
-          :y="getEventVerifiedBadgePosition(event).y + 1"
-          text-anchor="middle"
-          dominant-baseline="middle"
-          fill="#ffffff"
-          font-size="8"
-          font-weight="bold"
-          pointer-events="none"
-        >
-          ✓
-        </text>
+        <g :transform="`translate(${getStatusBadgePosition(event).x}, ${getStatusBadgePosition(event).y})`">
+          <circle
+            r="8"
+            :fill="getStatusBadgeColor(event)"
+            stroke="#ffffff"
+            stroke-width="2"
+            pointer-events="none"
+          />
+          <text
+            text-anchor="middle"
+            dominant-baseline="middle"
+            fill="#ffffff"
+            :font-size="event.verificationStatus === 'conflict' ? 10 : 9"
+            font-weight="bold"
+            pointer-events="none"
+          >
+            {{ getStatusBadgeText(event) }}
+          </text>
+        </g>
       </g>
 
       <g v-if="isDragging && draggingEvent">
@@ -164,14 +170,22 @@
       >
         {{ filteredEvents.length }} 条物候记录
       </text>
+      <g :transform="`translate(${center}, ${center + 50})`">
+        <circle r="5" fill="#10b981" />
+        <text x="10" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="10">已校定</text>
+        <circle cx="70" r="5" fill="#f59e0b" />
+        <text x="80" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="10">未校定</text>
+        <circle cx="140" r="5" fill="#ef4444" />
+        <text x="150" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="10">冲突中</text>
+      </g>
     </svg>
   </div>
 </template>
 
 <script setup lang="ts">import { ref, computed } from 'vue';
 import { usePhenologyStore } from '@/stores/phenology';
-import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTermKey } from '@/types';
-import { dayOfYearToAngle, getDayOfYear, getDaysInYear, parseDate, angleToDayOfYear, formatDate, getDateFromDayOfYear } from '@/utils';
+import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTermKey, type VerificationStatus } from '@/types';
+import { dayOfYearToAngle, getDayOfYear, getDaysInYear, parseDate, angleToDayOfYear, formatDate, getDateFromDayOfYear, getVerificationStatusInfo } from '@/utils';
 const store = usePhenologyStore();
 const svgSize = 700;
 const center = svgSize / 2;
@@ -298,15 +312,47 @@ function getEventLabelTransform(event: PhenologyEvent) {
  const midAngle = (startAngle + endAngle) / 2;
  return `rotate(${midAngle}, ${pos.x}, ${pos.y})`;
 }
-function getEventVerifiedBadgePosition(event: PhenologyEvent) {
+function getStatusBadgePosition(event: PhenologyEvent) {
  const endAngle = getEventEndAngle(event);
  const trackIdx = getEventTrackIndex(event);
  const radius = innerRadius + 5 + trackIdx * (eventTrackWidth / 3) + (eventTrackWidth / 6) - 2;
  return polarToCartesian(radius, endAngle - 2);
 }
-function getEventTypeColor(type: string): string {
- const info = EVENT_TYPES.find(t => t.key === type);
- return info?.color || '#94a3b8';
+function getEventFillColor(event: PhenologyEvent): string {
+  const typeInfo = EVENT_TYPES.find(t => t.key === event.type);
+  const baseColor = typeInfo?.color || '#94a3b8';
+  return baseColor;
+}
+
+function getEventFilter(event: PhenologyEvent): string {
+  const status: VerificationStatus = event.verificationStatus || 'unverified';
+  if (status === 'conflict') return 'url(#conflictGlow)';
+  if (status === 'verified') return 'url(#verifiedGlow)';
+  return 'url(#shadow)';
+}
+function getEventStrokeColor(event: PhenologyEvent): string {
+ const status: VerificationStatus = event.verificationStatus || 'unverified';
+ if (selectedEventId.value === event.id) return '#1e293b';
+ if (status === 'conflict') return '#ef4444';
+ if (status === 'unverified') return '#f59e0b';
+ return 'transparent';
+}
+function getEventStrokeWidth(event: PhenologyEvent): number {
+ const status: VerificationStatus = event.verificationStatus || 'unverified';
+ if (selectedEventId.value === event.id) return 2;
+ if (status === 'conflict') return 3;
+ if (status === 'unverified') return 2;
+ return 0;
+}
+function getStatusBadgeColor(event: PhenologyEvent): string {
+ const info = getVerificationStatusInfo(event.verificationStatus || 'unverified');
+ return info.color;
+}
+function getStatusBadgeText(event: PhenologyEvent): string {
+ const status: VerificationStatus = event.verificationStatus || 'unverified';
+ if (status === 'verified') return '✓';
+ if (status === 'conflict') return '!';
+ return '?';
 }
 function getEventOpacity(event: PhenologyEvent): number {
  if (selectedEventId.value === event.id)

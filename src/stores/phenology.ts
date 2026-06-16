@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PhenologyEvent, Region, SolarTermKey, EventType, AppState, SourceInfo } from '@/types'
+import type { PhenologyEvent, Region, SolarTermKey, EventType, AppState, SourceRecord } from '@/types'
 import { EVENT_TYPES, SOLAR_TERMS } from '@/types'
 import {
   generateId,
@@ -8,7 +8,15 @@ import {
   parseDate,
   validateEvent,
   formatDate,
-  createDefaultSource
+  createDefaultSource,
+  analyzeConflicts,
+  determineVerificationStatus,
+  createSourceRecord,
+  createVersionSnapshot,
+  createVersionEntry,
+  canVerify,
+  getWeightedAverageObservation,
+  getDominantType
 } from '@/utils'
 
 const DEFAULT_REGIONS: Region[] = [
@@ -19,9 +27,17 @@ const DEFAULT_REGIONS: Region[] = [
   { id: 'harbin', name: '哈尔滨', province: '黑龙江', latitude: 45.8, longitude: 126.5, climateZone: '中温带大陆性季风气候' }
 ]
 
+function makeSourceRecord(name: string, type: 'book' | 'paper' | 'website' | 'oral' | 'other', startDate: string, durationDays: number, reliability?: 'high' | 'medium' | 'low'): SourceRecord {
+  return createSourceRecord(
+    { id: generateId(), name, type },
+    { startDate, durationDays },
+    { reliability }
+  )
+}
+
 function createSampleEvents(): PhenologyEvent[] {
   const now = Date.now()
-  return [
+  const events: PhenologyEvent[] = [
     {
       id: generateId(),
       name: '迎春花开',
@@ -31,10 +47,17 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 20,
       regionId: 'beijing',
       year: 2024,
-      sources: [{ id: generateId(), name: '北京植物志', type: 'book' }],
-      verified: true,
+      sources: [
+        makeSourceRecord('北京植物志', 'book', '2024-02-05', 20),
+        makeSourceRecord('华北物候观测报告', 'paper', '2024-02-08', 18),
+        makeSourceRecord('民间口述记录', 'oral', '2024-01-28', 25, 'low')
+      ],
+      verified: false,
+      verificationStatus: 'conflict',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -45,10 +68,16 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 7,
       regionId: 'beijing',
       year: 2024,
-      sources: [{ id: generateId(), name: '华北农事历', type: 'book' }],
+      sources: [
+        makeSourceRecord('华北农事历', 'book', '2024-03-10', 7),
+        makeSourceRecord('现代农业气象数据', 'website', '2024-03-12', 5)
+      ],
       verified: true,
+      verificationStatus: 'verified',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -59,10 +88,15 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 10,
       regionId: 'beijing',
       year: 2024,
-      sources: [{ id: generateId(), name: '中国鸟类迁徙报告', type: 'paper' }],
-      verified: true,
+      sources: [
+        makeSourceRecord('中国鸟类迁徙报告', 'paper', '2024-03-25', 10)
+      ],
+      verified: false,
+      verificationStatus: 'unverified',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -73,10 +107,16 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 3,
       regionId: 'beijing',
       year: 2024,
-      sources: [{ id: generateId(), name: '中华民俗大典', type: 'book' }],
+      sources: [
+        makeSourceRecord('中华民俗大典', 'book', '2024-04-04', 3),
+        makeSourceRecord('地方志·北京卷', 'book', '2024-04-04', 3)
+      ],
       verified: true,
+      verificationStatus: 'verified',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -87,10 +127,17 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 15,
       regionId: 'shanghai',
       year: 2024,
-      sources: [{ id: generateId(), name: '上海园林植物记录', type: 'book' }],
-      verified: true,
+      sources: [
+        makeSourceRecord('上海园林植物记录', 'book', '2024-03-20', 15),
+        makeSourceRecord('江南花讯网', 'website', '2024-03-25', 12),
+        makeSourceRecord('老园丁口述', 'oral', '2024-03-15', 18, 'low')
+      ],
+      verified: false,
+      verificationStatus: 'conflict',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -101,10 +148,16 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 30,
       regionId: 'guangzhou',
       year: 2024,
-      sources: [{ id: generateId(), name: '岭南花卉志', type: 'book' }],
+      sources: [
+        makeSourceRecord('岭南花卉志', 'book', '2024-01-28', 30),
+        makeSourceRecord('华南植物观测站', 'paper', '2024-01-30', 28)
+      ],
       verified: true,
+      verificationStatus: 'verified',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -117,8 +170,11 @@ function createSampleEvents(): PhenologyEvent[] {
       year: 2024,
       sources: [],
       verified: false,
+      verificationStatus: 'unverified',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     },
     {
       id: generateId(),
@@ -129,12 +185,37 @@ function createSampleEvents(): PhenologyEvent[] {
       durationDays: 2,
       regionId: 'harbin',
       year: 2024,
-      sources: [{ id: generateId(), name: '东北民俗录', type: 'book' }],
-      verified: true,
+      sources: [
+        makeSourceRecord('东北民俗录', 'book', '2024-12-10', 2)
+      ],
+      verified: false,
+      verificationStatus: 'unverified',
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 1,
+      versionHistory: []
     }
   ]
+
+  events.forEach(event => {
+    const analysis = analyzeConflicts(event.sources)
+    event.conflictAnalysis = analysis
+    event.verificationStatus = determineVerificationStatus(event.sources, event.verified, analysis)
+    const snapshot = createVersionSnapshot(event)
+    event.versionHistory = [{
+      id: generateId(),
+      version: 1,
+      action: 'create',
+      description: '创建事件',
+      timestamp: now,
+      operator: '系统',
+      before: null,
+      after: snapshot,
+      diff: ['创建新事件']
+    }]
+  })
+
+  return events
 }
 
 export const usePhenologyStore = defineStore('phenology', () => {
@@ -219,6 +300,12 @@ export const usePhenologyStore = defineStore('phenology', () => {
     state.value.viewMode = mode
   }
 
+  function refreshEventStatus(event: PhenologyEvent) {
+    const analysis = analyzeConflicts(event.sources)
+    event.conflictAnalysis = analysis
+    event.verificationStatus = determineVerificationStatus(event.sources, event.verified, analysis)
+  }
+
   function createEmptyEvent(): PhenologyEvent {
     const now = Date.now()
     return {
@@ -232,8 +319,12 @@ export const usePhenologyStore = defineStore('phenology', () => {
       year: state.value.currentYear,
       sources: [],
       verified: false,
+      verificationStatus: 'unverified',
+      conflictAnalysis: { hasConflict: false, conflicts: [], overallSeverity: 'none', consensusScore: 0 },
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      currentVersion: 0,
+      versionHistory: []
     }
   }
 
@@ -250,9 +341,27 @@ export const usePhenologyStore = defineStore('phenology', () => {
       id: generateId(),
       year: state.value.currentYear,
       regionId: state.value.currentRegionId,
+      currentVersion: 0,
+      versionHistory: [],
       createdAt: now,
       updatedAt: now
     } as PhenologyEvent
+
+    refreshEventStatus(newEvent)
+
+    const snapshot = createVersionSnapshot(newEvent)
+    newEvent.versionHistory = [{
+      id: generateId(),
+      version: 1,
+      action: 'create',
+      description: '创建事件',
+      timestamp: now,
+      operator: '当前用户',
+      before: null,
+      after: snapshot,
+      diff: ['创建新事件']
+    }]
+    newEvent.currentVersion = 1
 
     events.value.push(newEvent)
     state.value.selectedEventId = newEvent.id
@@ -263,6 +372,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     const idx = events.value.findIndex(e => e.id === eventId)
     if (idx < 0) return { success: false, errors: [{ field: 'id', message: '事件不存在' }] }
 
+    const beforeSnapshot = createVersionSnapshot(events.value[idx])
     const mergedEvent = { ...events.value[idx], ...updates }
     const errors = validateEvent(mergedEvent, events.value)
     if (errors.length > 0) {
@@ -274,6 +384,14 @@ export const usePhenologyStore = defineStore('phenology', () => {
       ...updates,
       updatedAt: Date.now()
     }
+
+    const event = events.value[idx]
+    refreshEventStatus(event)
+
+    const entry = createVersionEntry(event, 'edit', '编辑事件', beforeSnapshot, '当前用户')
+    event.versionHistory.push(entry)
+    event.currentVersion = entry.version
+
     return { success: true, event: events.value[idx], errors: [] }
   }
 
@@ -282,8 +400,9 @@ export const usePhenologyStore = defineStore('phenology', () => {
     if (idx < 0) return { success: false, errors: [{ field: 'id', message: '事件不存在' }] }
 
     const event = events.value[idx]
+    const beforeSnapshot = createVersionSnapshot(event)
     const newSolarTerm = getSolarTermForDate(parseDate(newStartDate))
-    
+
     const updatedEvent = {
       ...event,
       startDate: newStartDate,
@@ -297,6 +416,12 @@ export const usePhenologyStore = defineStore('phenology', () => {
     }
 
     events.value[idx] = updatedEvent
+    refreshEventStatus(events.value[idx])
+
+    const entry = createVersionEntry(events.value[idx], 'move', `拖动至 ${newStartDate}`, beforeSnapshot, '当前用户')
+    events.value[idx].versionHistory.push(entry)
+    events.value[idx].currentVersion = entry.version
+
     return { success: true, event: events.value[idx], errors: [] }
   }
 
@@ -311,37 +436,118 @@ export const usePhenologyStore = defineStore('phenology', () => {
     }
   }
 
-  function addSource(eventId: string, source: SourceInfo) {
+  function addSourceRecord(eventId: string, sourceRecord: SourceRecord) {
     const event = events.value.find(e => e.id === eventId)
-    if (event) {
-      event.sources.push({ ...source, id: source.id || generateId() })
+    if (!event) return
+
+    const beforeSnapshot = createVersionSnapshot(event)
+    event.sources.push({ ...sourceRecord, id: sourceRecord.id || generateId() })
+    event.updatedAt = Date.now()
+    refreshEventStatus(event)
+
+    const entry = createVersionEntry(event, 'add_source', `添加来源：${sourceRecord.sourceInfo.name}`, beforeSnapshot, '当前用户')
+    event.versionHistory.push(entry)
+    event.currentVersion = entry.version
+  }
+
+  function removeSourceRecord(eventId: string, sourceId: string) {
+    const event = events.value.find(e => e.id === eventId)
+    if (!event) return
+
+    const beforeSnapshot = createVersionSnapshot(event)
+    const sourceIdx = event.sources.findIndex(s => s.id === sourceId)
+    if (sourceIdx >= 0) {
+      const sourceName = event.sources[sourceIdx].sourceInfo.name
+      event.sources.splice(sourceIdx, 1)
+      if (event.sources.length === 0) {
+        event.verified = false
+      }
       event.updatedAt = Date.now()
+      refreshEventStatus(event)
+
+      const entry = createVersionEntry(event, 'remove_source', `移除来源：${sourceName}`, beforeSnapshot, '当前用户')
+      event.versionHistory.push(entry)
+      event.currentVersion = entry.version
     }
   }
 
-  function removeSource(eventId: string, sourceId: string) {
+  function updateSourceRecord(eventId: string, sourceId: string, updates: Partial<SourceRecord>) {
     const event = events.value.find(e => e.id === eventId)
-    if (event) {
-      const idx = event.sources.findIndex(s => s.id === sourceId)
-      if (idx >= 0) {
-        event.sources.splice(idx, 1)
-        if (event.sources.length === 0) {
-          event.verified = false
-        }
-        event.updatedAt = Date.now()
-      }
+    if (!event) return
+
+    const beforeSnapshot = createVersionSnapshot(event)
+    const source = event.sources.find(s => s.id === sourceId)
+    if (source) {
+      Object.assign(source, updates)
+      event.updatedAt = Date.now()
+      refreshEventStatus(event)
+
+      const entry = createVersionEntry(event, 'update_source', `更新来源：${source.sourceInfo.name}`, beforeSnapshot, '当前用户')
+      event.versionHistory.push(entry)
+      event.currentVersion = entry.version
     }
   }
 
-  function updateSource(eventId: string, sourceId: string, updates: Partial<SourceInfo>) {
+  function verifyEvent(eventId: string) {
     const event = events.value.find(e => e.id === eventId)
-    if (event) {
-      const source = event.sources.find(s => s.id === sourceId)
-      if (source) {
-        Object.assign(source, updates)
-        event.updatedAt = Date.now()
-      }
-    }
+    if (!event) return false
+
+    const analysis = event.conflictAnalysis || analyzeConflicts(event.sources)
+    if (!canVerify(event.sources, analysis)) return false
+
+    const beforeSnapshot = createVersionSnapshot(event)
+    event.verified = true
+    event.updatedAt = Date.now()
+    refreshEventStatus(event)
+
+    const entry = createVersionEntry(event, 'verify', '标记为已校定', beforeSnapshot, '当前用户')
+    event.versionHistory.push(entry)
+    event.currentVersion = entry.version
+    return true
+  }
+
+  function unverifyEvent(eventId: string) {
+    const event = events.value.find(e => e.id === eventId)
+    if (!event) return
+
+    const beforeSnapshot = createVersionSnapshot(event)
+    event.verified = false
+    event.updatedAt = Date.now()
+    refreshEventStatus(event)
+
+    const entry = createVersionEntry(event, 'unverify', '取消校定', beforeSnapshot, '当前用户')
+    event.versionHistory.push(entry)
+    event.currentVersion = entry.version
+  }
+
+  function rollbackToVersion(eventId: string, targetVersion: number) {
+    const event = events.value.find(e => e.id === eventId)
+    if (!event) return false
+
+    const targetEntry = event.versionHistory.find(v => v.version === targetVersion)
+    if (!targetEntry) return false
+
+    const beforeSnapshot = createVersionSnapshot(event)
+    const after = targetEntry.after
+
+    event.name = after.name
+    event.type = after.type
+    event.solarTerm = after.solarTerm
+    event.startDate = after.startDate
+    event.durationDays = after.durationDays
+    event.sources = after.sources.map(s => ({ ...s, sourceInfo: { ...s.sourceInfo } }))
+    event.verified = after.verified
+    event.verificationStatus = after.verificationStatus
+    event.description = after.description
+    event.updatedAt = Date.now()
+
+    refreshEventStatus(event)
+
+    const newEntry = createVersionEntry(event, 'edit', `回退到版本 v${targetVersion}`, beforeSnapshot, '当前用户')
+    event.versionHistory.push(newEntry)
+    event.currentVersion = newEntry.version
+
+    return true
   }
 
   function getEventsForSolarTerm(solarTerm: SolarTermKey): PhenologyEvent[] {
@@ -375,11 +581,19 @@ export const usePhenologyStore = defineStore('phenology', () => {
     updateEvent,
     moveEvent,
     deleteEvent,
-    addSource,
-    removeSource,
-    updateSource,
+    addSourceRecord,
+    removeSourceRecord,
+    updateSourceRecord,
+    verifyEvent,
+    unverifyEvent,
+    rollbackToVersion,
+    refreshEventStatus,
     getEventsForSolarTerm,
     getEventsForRegion,
-    createDefaultSource
+    createDefaultSource,
+    getDominantType,
+    getWeightedAverageObservation,
+    canVerify,
+    analyzeConflicts
   }
 })

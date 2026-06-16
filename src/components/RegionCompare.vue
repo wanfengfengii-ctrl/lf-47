@@ -105,7 +105,9 @@
                   <div class="tooltip-title">{{ event.name }}</div>
                   <div class="tooltip-date">{{ event.startDate }} · 持续 {{ event.durationDays }} 天</div>
                   <div class="tooltip-term">{{ getSolarTermName(event.solarTerm) }}</div>
-                  <div v-if="event.verified" class="tooltip-verified">✓ 已校定</div>
+                  <div class="tooltip-status" :class="event.verificationStatus || 'unverified'">
+                    {{ getStatusLabel(event.verificationStatus) }}
+                  </div>
                 </div>
                 <span v-if="getEventBarWidth(event) > 60" class="event-bar-text">
                   {{ truncateText(event.name, 6) }}
@@ -301,6 +303,15 @@ function truncateText(text: string, maxLen: number): string {
 function selectEvent(eventId: string) {
   store.selectEvent(eventId)
   store.setViewMode('disc')
+}
+
+function getStatusLabel(status: string | undefined): string {
+  const map: Record<string, string> = {
+    verified: '✓ 已校定',
+    conflict: '⚡ 冲突中',
+    unverified: '⚠ 未校定'
+  }
+  return map[status || 'unverified'] || '⚠ 未校定'
 }
 
 const totalEvents = computed(() => {
@@ -638,9 +649,20 @@ const floweringDifferences = computed<FloweringDiff[]>(() => {
   margin-top: 2px;
 }
 
-.tooltip-verified {
-  color: #34d399;
+.tooltip-status {
   margin-top: 4px;
+}
+
+.tooltip-status.verified {
+  color: #34d399;
+}
+
+.tooltip-status.conflict {
+  color: #f87171;
+}
+
+.tooltip-status.unverified {
+  color: #fbbf24;
 }
 
 .compare-stats {
