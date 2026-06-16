@@ -143,8 +143,7 @@ function handleToggleType(type: EventType) {
 }
 
 function handleCreateNew() {
-  store.setEditing(true)
-  store.selectEvent(null)
+  store.startCreating()
 }
 
 function incrementYear() {

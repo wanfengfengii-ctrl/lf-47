@@ -57,6 +57,9 @@
             type="date"
             :status="getFieldStatus('startDate')"
             placeholder="选择开始日期"
+            :disabled-date="disabledDate"
+            :min-date="minDate"
+            :max-date="maxDate"
             @update:value="onDateChange"
           />
         </NFormItem>
@@ -406,6 +409,12 @@ watch(currentEvent, (event) => {
   }
 }, { immediate: true })
 
+watch(isCreating, (creating) => {
+  if (creating) {
+    resetForm()
+  }
+})
+
 function fillFormFromEvent(event: PhenologyEvent) {
   formData.name = event.name
   formData.type = event.type
@@ -437,6 +446,20 @@ function onDateChange(value: number | null) {
     formData.startDate = formatDate(new Date(value))
   }
 }
+
+function disabledDate(timestamp: number): boolean {
+  const date = new Date(timestamp)
+  const year = date.getFullYear()
+  return year !== store.state.currentYear
+}
+
+const minDate = computed(() => {
+  return new Date(store.state.currentYear, 0, 1).getTime()
+})
+
+const maxDate = computed(() => {
+  return new Date(store.state.currentYear, 11, 31).getTime()
+})
 
 function getTagType(type: EventType): 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary' {
   const map: Record<string, any> = {
@@ -490,8 +513,7 @@ function removeSource(index: number) {
 
 function startCreate() {
   resetForm()
-  store.setEditing(true)
-  store.selectEvent(null)
+  store.startCreating()
 }
 
 function startEdit() {

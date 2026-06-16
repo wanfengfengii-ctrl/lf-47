@@ -200,11 +200,19 @@ export const usePhenologyStore = defineStore('phenology', () => {
 
   function selectEvent(eventId: string | null) {
     state.value.selectedEventId = eventId
-    state.value.isEditing = eventId !== null
+    if (eventId !== null) {
+      state.value.isEditing = false
+    }
   }
 
   function setEditing(editing: boolean) {
     state.value.isEditing = editing
+  }
+
+  function startCreating() {
+    state.value.selectedEventId = null
+    state.value.isEditing = true
+    state.value.viewMode = 'disc'
   }
 
   function setViewMode(mode: 'disc' | 'compare') {
@@ -360,6 +368,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     toggleEventType,
     selectEvent,
     setEditing,
+    startCreating,
     setViewMode,
     createEmptyEvent,
     addEvent,
