@@ -301,6 +301,10 @@ function truncateText(text: string, maxLen: number): string {
 }
 
 function selectEvent(eventId: string) {
+  const event = store.events.find(e => e.id === eventId)
+  if (event) {
+    store.setRegion(event.regionId)
+  }
   store.selectEvent(eventId)
   store.setViewMode('disc')
 }

@@ -183,10 +183,12 @@
 </template>
 
 <script setup lang="ts">import { ref, computed } from 'vue';
+import { useMessage } from 'naive-ui';
 import { usePhenologyStore } from '@/stores/phenology';
 import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTermKey, type VerificationStatus } from '@/types';
 import { dayOfYearToAngle, getDayOfYear, getDaysInYear, parseDate, angleToDayOfYear, formatDate, getDateFromDayOfYear, getVerificationStatusInfo } from '@/utils';
 const store = usePhenologyStore();
+const message = useMessage();
 const svgSize = 700;
 const center = svgSize / 2;
 const outerRadius = 320;
@@ -427,7 +429,13 @@ function handleEventClick(eventId: string) {
  }
 }
 function handleSolarTermClick(solarTerm: SolarTermKey) {
- console.log('Selected solar term:', solarTerm);
+ const termEvents = store.getEventsForSolarTerm(solarTerm);
+ if (termEvents.length > 0) {
+   store.selectEvent(termEvents[0].id);
+ } else {
+   const term = SOLAR_TERMS.find(t => t.key === solarTerm);
+   message.info(`「${term?.name}」节气下暂无物候事件，点击"新建事件"添加`);
+ }
 }
 </script>
 

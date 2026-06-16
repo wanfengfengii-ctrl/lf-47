@@ -219,7 +219,7 @@
               {{ currentEvent.durationDays }} 天
             </NDescriptionsItem>
             <NDescriptionsItem label="地区">
-              {{ store.currentRegion.name }} · {{ store.currentRegion.climateZone }}
+              {{ getEventRegion(currentEvent).name }} · {{ getEventRegion(currentEvent).climateZone }}
             </NDescriptionsItem>
             <NDescriptionsItem label="年份">
               {{ currentEvent.year }}
@@ -580,6 +580,11 @@ function getVerificationStatusLabel(status: string): string {
     unverified: '⚠ 未校定'
   }
   return map[status] || status
+}
+
+function getEventRegion(event: PhenologyEvent | null) {
+  if (!event) return store.currentRegion
+  return store.regions.find(r => r.id === event.regionId) || store.currentRegion
 }
 
 function addSourceRecord() {
