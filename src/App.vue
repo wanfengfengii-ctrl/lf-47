@@ -10,7 +10,7 @@
           <Toolbar />
 
           <div class="main-content">
-            <div class="content-area">
+            <div class="content-area" v-show="store.state.viewMode !== 'graph'">
               <div class="disc-area" v-show="store.state.viewMode === 'disc'">
                 <PhenologyDisc />
               </div>
@@ -18,8 +18,11 @@
                 <RegionCompare />
               </div>
             </div>
+            <div class="graph-area" v-show="store.state.viewMode === 'graph'">
+              <GraphView />
+            </div>
 
-            <div class="editor-sidebar">
+            <div class="editor-sidebar" v-show="store.state.viewMode !== 'graph'">
               <EventEditor />
             </div>
           </div>
@@ -47,6 +50,7 @@ import Toolbar from '@/components/Toolbar.vue'
 import PhenologyDisc from '@/components/PhenologyDisc.vue'
 import EventEditor from '@/components/EventEditor.vue'
 import RegionCompare from '@/components/RegionCompare.vue'
+import GraphView from '@/components/GraphView.vue'
 
 const themeOverrides = {
   common: {
@@ -121,6 +125,13 @@ html, body {
   height: 100%;
 }
 
+.graph-area {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
 .editor-sidebar {
   width: 420px;
   min-width: 360px;
@@ -167,7 +178,7 @@ html, body {
     flex-direction: column;
   }
 
-  .editor-sidebar {
+  .main-content:not(:has(.graph-area)) .editor-sidebar {
     width: 100%;
     max-width: 100%;
     min-width: 100%;
@@ -177,7 +188,7 @@ html, body {
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
   }
 
-  .content-area {
+  .main-content:not(:has(.graph-area)) .content-area {
     height: 55%;
     padding: 12px;
   }

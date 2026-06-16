@@ -55,6 +55,12 @@
           >
             📊 地区对比
           </NButton>
+          <NButton
+            :type="store.state.viewMode === 'graph' ? 'primary' : 'default'"
+            @click="() => handleViewModeChange('graph')"
+          >
+            🕸️ 知识图谱
+          </NButton>
         </NButtonGroup>
       </div>
     </div>
@@ -134,7 +140,7 @@ function handleRegionChange(regionId: string) {
   store.setRegion(regionId)
 }
 
-function handleViewModeChange(mode: 'disc' | 'compare') {
+function handleViewModeChange(mode: 'disc' | 'compare' | 'graph') {
   store.setViewMode(mode)
 }
 

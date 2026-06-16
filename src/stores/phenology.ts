@@ -1,7 +1,25 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { PhenologyEvent, Region, SolarTermKey, EventType, AppState, SourceRecord } from '@/types'
-import { EVENT_TYPES, SOLAR_TERMS } from '@/types'
+import { ref, computed, reactive } from 'vue'
+import type {
+  PhenologyEvent,
+  Region,
+  SolarTermKey,
+  EventType,
+  AppState,
+  SourceRecord,
+  GraphData,
+  GraphNode,
+  GraphEdge,
+  GraphNodeType,
+  GraphSearchFilters,
+  GraphViewState,
+  SourceInfo
+} from '@/types'
+import {
+  EVENT_TYPES,
+  SOLAR_TERMS,
+  GRAPH_NODE_TYPE_INFO
+} from '@/types'
 import {
   generateId,
   getSolarTermForDate,
@@ -231,6 +249,24 @@ export const usePhenologyStore = defineStore('phenology', () => {
   const events = ref<PhenologyEvent[]>(createSampleEvents())
   const regions = ref<Region[]>(DEFAULT_REGIONS)
 
+  const graphViewState = reactive<GraphViewState>({
+    selectedNodeId: null,
+    hoveredNodeId: null,
+    highlightSources: true,
+    showLabels: true,
+    layoutMode: 'force'
+  })
+
+  const graphSearchFilters = reactive<GraphSearchFilters>({
+    keyword: '',
+    eventTypes: [...EVENT_TYPES.map(t => t.key)],
+    regionIds: [],
+    solarTermKeys: [],
+    nodeTypes: ['event', 'solarTerm', 'region', 'source'],
+    minReliability: 0,
+    maxHops: 2
+  })
+
   const currentRegion = computed(() =>
     regions.value.find(r => r.id === state.value.currentRegionId)!
   )
@@ -296,8 +332,16 @@ export const usePhenologyStore = defineStore('phenology', () => {
     state.value.viewMode = 'disc'
   }
 
-  function setViewMode(mode: 'disc' | 'compare') {
+  function setViewMode(mode: 'disc' | 'compare' | 'graph') {
     state.value.viewMode = mode
+    if (mode === 'graph') {
+      state.value.selectedEventId = null
+      state.value.isEditing = false
+      resetGraphFilters()
+    } else {
+      selectGraphNode(null)
+      hoverGraphNode(null)
+    }
   }
 
   function refreshEventStatus(event: PhenologyEvent) {
@@ -560,6 +604,359 @@ export const usePhenologyStore = defineStore('phenology', () => {
     )
   }
 
+  function getEventsForFilters(): PhenologyEvent[] {
+    return events.value.filter(e => {
+      if (graphSearchFilters.eventTypes.length > 0 && !graphSearchFilters.eventTypes.includes(e.type)) {
+        return false
+      }
+      if (graphSearchFilters.regionIds.length > 0 && !graphSearchFilters.regionIds.includes(e.regionId)) {
+        return false
+      }
+      if (graphSearchFilters.solarTermKeys.length > 0 && !graphSearchFilters.solarTermKeys.includes(e.solarTerm)) {
+        return false
+      }
+      if (graphSearchFilters.minReliability > 0) {
+        const maxReliability = e.sources.length > 0
+          ? Math.max(...e.sources.map(s => s.reliabilityScore))
+          : 0
+        if (maxReliability < graphSearchFilters.minReliability) {
+          return false
+        }
+      }
+      if (graphSearchFilters.keyword) {
+        const keyword = graphSearchFilters.keyword.toLowerCase()
+        const matchName = e.name.toLowerCase().includes(keyword)
+        const matchDesc = e.description?.toLowerCase().includes(keyword)
+        const matchSource = e.sources.some(s =>
+          s.sourceInfo.name.toLowerCase().includes(keyword) ||
+          s.sourceInfo.note?.toLowerCase().includes(keyword)
+        )
+        if (!matchName && !matchDesc && !matchSource) {
+          return false
+        }
+      }
+      return true
+    })
+  }
+
+  function generateGraphData(): GraphData {
+    const filteredEventsList = getEventsForFilters()
+    const nodes: GraphNode[] = []
+    const edges: GraphEdge[] = []
+    const nodeIdSet = new Set<string>()
+    const edgeIdSet = new Set<string>()
+
+    const allSources = new Map<string, SourceInfo>()
+    filteredEventsList.forEach(e => {
+      e.sources.forEach(s => {
+        if (!allSources.has(s.sourceInfo.id)) {
+          allSources.set(s.sourceInfo.id, s.sourceInfo)
+        }
+      })
+    })
+
+    const allRegions = new Set<string>()
+    const allSolarTerms = new Set<SolarTermKey>()
+    filteredEventsList.forEach(e => {
+      allRegions.add(e.regionId)
+      allSolarTerms.add(e.solarTerm)
+    })
+
+    if (graphSearchFilters.nodeTypes.includes('event')) {
+      filteredEventsList.forEach(event => {
+        const eventTypeInfo = EVENT_TYPES.find(t => t.key === event.type)!
+        const avgReliability = event.sources.length > 0
+          ? event.sources.reduce((sum, s) => sum + s.reliabilityScore, 0) / event.sources.length
+          : 50
+        const size = 20 + (avgReliability / 100) * 15
+
+        nodes.push({
+          id: `event-${event.id}`,
+          type: 'event',
+          label: event.name,
+          subLabel: eventTypeInfo.label,
+          description: event.description,
+          color: eventTypeInfo.color,
+          icon: eventTypeInfo.icon,
+          size,
+          data: { eventId: event.id, event }
+        })
+        nodeIdSet.add(`event-${event.id}`)
+      })
+    }
+
+    if (graphSearchFilters.nodeTypes.includes('solarTerm')) {
+      allSolarTerms.forEach(termKey => {
+        const term = SOLAR_TERMS.find(t => t.key === termKey)!
+        const eventCount = filteredEventsList.filter(e => e.solarTerm === termKey).length
+        const size = 18 + Math.min(eventCount * 3, 15)
+
+        nodes.push({
+          id: `solarTerm-${termKey}`,
+          type: 'solarTerm',
+          label: term.name,
+          subLabel: `${term.month}月${term.day}日`,
+          description: `二十四节气之${term.name}`,
+          color: GRAPH_NODE_TYPE_INFO.solarTerm.color,
+          icon: GRAPH_NODE_TYPE_INFO.solarTerm.icon,
+          size,
+          data: { solarTermKey: termKey, term }
+        })
+        nodeIdSet.add(`solarTerm-${termKey}`)
+      })
+    }
+
+    if (graphSearchFilters.nodeTypes.includes('region')) {
+      allRegions.forEach(regionId => {
+        const region = regions.value.find(r => r.id === regionId)
+        if (!region) return
+        const eventCount = filteredEventsList.filter(e => e.regionId === regionId).length
+        const size = 18 + Math.min(eventCount * 3, 15)
+
+        nodes.push({
+          id: `region-${regionId}`,
+          type: 'region',
+          label: region.name,
+          subLabel: region.province,
+          description: region.climateZone,
+          color: GRAPH_NODE_TYPE_INFO.region.color,
+          icon: GRAPH_NODE_TYPE_INFO.region.icon,
+          size,
+          data: { regionId, region }
+        })
+        nodeIdSet.add(`region-${regionId}`)
+      })
+    }
+
+    if (graphSearchFilters.nodeTypes.includes('source')) {
+      allSources.forEach((sourceInfo, sourceId) => {
+        const citingEvents = filteredEventsList.filter(e =>
+          e.sources.some(s => s.sourceInfo.id === sourceId)
+        )
+        const avgReliability = citingEvents.length > 0
+          ? citingEvents.reduce((sum, e) => {
+              const source = e.sources.find(s => s.sourceInfo.id === sourceId)
+              return sum + (source?.reliabilityScore || 0)
+            }, 0) / citingEvents.length
+          : 50
+        const size = 16 + Math.min(citingEvents.length * 2, 12)
+
+        nodes.push({
+          id: `source-${sourceId}`,
+          type: 'source',
+          label: sourceInfo.name,
+          subLabel: sourceInfo.type,
+          description: sourceInfo.note,
+          color: GRAPH_NODE_TYPE_INFO.source.color,
+          icon: GRAPH_NODE_TYPE_INFO.source.icon,
+          size,
+          data: { sourceId, sourceInfo, reliabilityScore: avgReliability }
+        })
+        nodeIdSet.add(`source-${sourceId}`)
+      })
+    }
+
+    filteredEventsList.forEach(event => {
+      const eventNodeId = `event-${event.id}`
+      if (!nodeIdSet.has(eventNodeId)) return
+
+      if (graphSearchFilters.nodeTypes.includes('solarTerm')) {
+        const termNodeId = `solarTerm-${event.solarTerm}`
+        const edgeId = `${eventNodeId}-${termNodeId}`
+        if (nodeIdSet.has(termNodeId) && !edgeIdSet.has(edgeId)) {
+          edges.push({
+            id: edgeId,
+            source: eventNodeId,
+            target: termNodeId,
+            type: 'belongs_to_solar_term',
+            weight: 1
+          })
+          edgeIdSet.add(edgeId)
+        }
+      }
+
+      if (graphSearchFilters.nodeTypes.includes('region')) {
+        const regionNodeId = `region-${event.regionId}`
+        const edgeId = `${eventNodeId}-${regionNodeId}`
+        if (nodeIdSet.has(regionNodeId) && !edgeIdSet.has(edgeId)) {
+          edges.push({
+            id: edgeId,
+            source: eventNodeId,
+            target: regionNodeId,
+            type: 'occurs_in_region',
+            weight: 1
+          })
+          edgeIdSet.add(edgeId)
+        }
+      }
+
+      if (graphSearchFilters.nodeTypes.includes('source')) {
+        event.sources.forEach(source => {
+          const sourceNodeId = `source-${source.sourceInfo.id}`
+          const edgeId = `${eventNodeId}-${sourceNodeId}`
+          if (nodeIdSet.has(sourceNodeId) && !edgeIdSet.has(edgeId)) {
+            const weight = source.reliabilityScore / 100
+            edges.push({
+              id: edgeId,
+              source: eventNodeId,
+              target: sourceNodeId,
+              type: 'cited_from_source',
+              weight
+            })
+            edgeIdSet.add(edgeId)
+          }
+        })
+      }
+    })
+
+    if (graphSearchFilters.maxHops >= 2) {
+      for (let i = 0; i < filteredEventsList.length; i++) {
+        for (let j = i + 1; j < filteredEventsList.length; j++) {
+          const e1 = filteredEventsList[i]
+          const e2 = filteredEventsList[j]
+          const id1 = `event-${e1.id}`
+          const id2 = `event-${e2.id}`
+          if (!nodeIdSet.has(id1) || !nodeIdSet.has(id2)) continue
+
+          if (e1.type === e2.type) {
+            const edgeId = `same-type-${e1.id}-${e2.id}`
+            if (!edgeIdSet.has(edgeId)) {
+              edges.push({
+                id: edgeId,
+                source: id1,
+                target: id2,
+                type: 'same_type',
+                weight: 0.4
+              })
+              edgeIdSet.add(edgeId)
+            }
+          }
+
+          if (e1.solarTerm === e2.solarTerm) {
+            const edgeId = `same-term-${e1.id}-${e2.id}`
+            if (!edgeIdSet.has(edgeId)) {
+              edges.push({
+                id: edgeId,
+                source: id1,
+                target: id2,
+                type: 'related_event',
+                weight: 0.6,
+                label: '同节气'
+              })
+              edgeIdSet.add(edgeId)
+            }
+          }
+        }
+      }
+    }
+
+    return { nodes, edges }
+  }
+
+  function getNodeNeighbors(nodeId: string): { nodes: GraphNode[], edges: GraphEdge[] } {
+    const graphData = generateGraphData()
+    const neighborNodeIds = new Set<string>([nodeId])
+    const neighborEdges: GraphEdge[] = []
+
+    for (let hop = 0; hop < graphSearchFilters.maxHops; hop++) {
+      const currentIds = new Set(neighborNodeIds)
+      graphData.edges.forEach(edge => {
+        if (currentIds.has(edge.source) || currentIds.has(edge.target)) {
+          neighborNodeIds.add(edge.source)
+          neighborNodeIds.add(edge.target)
+          if (!neighborEdges.find(e => e.id === edge.id)) {
+            neighborEdges.push(edge)
+          }
+        }
+      })
+    }
+
+    const neighborNodes = graphData.nodes.filter(n => neighborNodeIds.has(n.id))
+    return { nodes: neighborNodes, edges: neighborEdges }
+  }
+
+  function setGraphViewMode(mode: 'force' | 'circular' | 'hierarchical') {
+    graphViewState.layoutMode = mode
+  }
+
+  function selectGraphNode(nodeId: string | null) {
+    graphViewState.selectedNodeId = nodeId
+  }
+
+  function hoverGraphNode(nodeId: string | null) {
+    graphViewState.hoveredNodeId = nodeId
+  }
+
+  function toggleHighlightSources(value: boolean) {
+    graphViewState.highlightSources = value
+  }
+
+  function toggleShowLabels(value: boolean) {
+    graphViewState.showLabels = value
+  }
+
+  function setGraphKeyword(keyword: string) {
+    graphSearchFilters.keyword = keyword
+  }
+
+  function toggleGraphEventType(type: EventType) {
+    const idx = graphSearchFilters.eventTypes.indexOf(type)
+    if (idx >= 0) {
+      graphSearchFilters.eventTypes.splice(idx, 1)
+    } else {
+      graphSearchFilters.eventTypes.push(type)
+    }
+  }
+
+  function toggleGraphRegion(regionId: string) {
+    const idx = graphSearchFilters.regionIds.indexOf(regionId)
+    if (idx >= 0) {
+      graphSearchFilters.regionIds.splice(idx, 1)
+    } else {
+      graphSearchFilters.regionIds.push(regionId)
+    }
+  }
+
+  function toggleGraphSolarTerm(termKey: SolarTermKey) {
+    const idx = graphSearchFilters.solarTermKeys.indexOf(termKey)
+    if (idx >= 0) {
+      graphSearchFilters.solarTermKeys.splice(idx, 1)
+    } else {
+      graphSearchFilters.solarTermKeys.push(termKey)
+    }
+  }
+
+  function toggleGraphNodeType(nodeType: GraphNodeType) {
+    const idx = graphSearchFilters.nodeTypes.indexOf(nodeType)
+    if (idx >= 0) {
+      if (graphSearchFilters.nodeTypes.length > 1) {
+        graphSearchFilters.nodeTypes.splice(idx, 1)
+      }
+    } else {
+      graphSearchFilters.nodeTypes.push(nodeType)
+    }
+  }
+
+  function setMinReliability(value: number) {
+    graphSearchFilters.minReliability = value
+  }
+
+  function setMaxHops(value: number) {
+    graphSearchFilters.maxHops = value
+  }
+
+  function resetGraphFilters() {
+    graphSearchFilters.keyword = ''
+    graphSearchFilters.eventTypes = [...EVENT_TYPES.map(t => t.key)]
+    graphSearchFilters.regionIds = []
+    graphSearchFilters.solarTermKeys = []
+    graphSearchFilters.nodeTypes = ['event', 'solarTerm', 'region', 'source']
+    graphSearchFilters.minReliability = 0
+    graphSearchFilters.maxHops = 2
+    graphViewState.selectedNodeId = null
+    graphViewState.hoveredNodeId = null
+  }
+
   return {
     state,
     events,
@@ -569,6 +966,8 @@ export const usePhenologyStore = defineStore('phenology', () => {
     selectedEvent,
     eventsBySolarTerm,
     compareEvents,
+    graphViewState,
+    graphSearchFilters,
     setYear,
     setRegion,
     toggleEventType,
@@ -594,6 +993,22 @@ export const usePhenologyStore = defineStore('phenology', () => {
     getDominantType,
     getWeightedAverageObservation,
     canVerify,
-    analyzeConflicts
+    analyzeConflicts,
+    generateGraphData,
+    getNodeNeighbors,
+    setGraphViewMode,
+    selectGraphNode,
+    hoverGraphNode,
+    toggleHighlightSources,
+    toggleShowLabels,
+    setGraphKeyword,
+    toggleGraphEventType,
+    toggleGraphRegion,
+    toggleGraphSolarTerm,
+    toggleGraphNodeType,
+    setMinReliability,
+    setMaxHops,
+    resetGraphFilters,
+    getEventsForFilters
   }
 })

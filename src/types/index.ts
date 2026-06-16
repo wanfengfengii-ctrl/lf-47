@@ -14,6 +14,22 @@ export const EVENT_TYPES: EventTypeInfo[] = [
   { key: 'folklore', label: '民俗活动', color: '#f59e0b', icon: '🏮' }
 ]
 
+export const GRAPH_NODE_TYPE_INFO: Record<GraphNodeType, { label: string; color: string; icon: string }> = {
+  event: { label: '物候事件', color: '#6366f1', icon: '📋' },
+  solarTerm: { label: '节气', color: '#10b981', icon: '🌿' },
+  region: { label: '地区', color: '#f59e0b', icon: '📍' },
+  source: { label: '来源文献', color: '#8b5cf6', icon: '📚' }
+}
+
+export const GRAPH_EDGE_TYPE_INFO: Record<GraphEdgeType, { label: string; color: string; dashed?: boolean }> = {
+  belongs_to_solar_term: { label: '属于节气', color: '#10b981' },
+  occurs_in_region: { label: '发生于', color: '#f59e0b' },
+  cited_from_source: { label: '引用自', color: '#8b5cf6' },
+  related_event: { label: '相关事件', color: '#ef4444', dashed: true },
+  same_type: { label: '同类型', color: '#6366f1', dashed: true },
+  same_region: { label: '同地区', color: '#f59e0b', dashed: true }
+}
+
 export type SolarTermKey =
   | 'lichun' | 'yushui' | 'jingzhe' | 'chunfen' | 'qingming' | 'guyu'
   | 'lixia' | 'xiaoman' | 'mangzhong' | 'xiazhi' | 'xiaoshu' | 'dashu'
@@ -170,13 +186,69 @@ export interface Region {
   climateZone: string
 }
 
+export type GraphNodeType = 'event' | 'solarTerm' | 'region' | 'source'
+
+export type GraphEdgeType = 'belongs_to_solar_term' | 'occurs_in_region' | 'cited_from_source' | 'related_event' | 'same_type' | 'same_region'
+
+export interface GraphNode {
+  id: string
+  type: GraphNodeType
+  label: string
+  subLabel?: string
+  description?: string
+  color: string
+  icon: string
+  size: number
+  x?: number
+  y?: number
+  vx?: number
+  vy?: number
+  data?: Record<string, any>
+  highlight?: boolean
+  dim?: boolean
+}
+
+export interface GraphEdge {
+  id: string
+  source: string
+  target: string
+  type: GraphEdgeType
+  weight: number
+  label?: string
+  highlight?: boolean
+  dim?: boolean
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+export interface GraphSearchFilters {
+  keyword: string
+  eventTypes: EventType[]
+  regionIds: string[]
+  solarTermKeys: SolarTermKey[]
+  nodeTypes: GraphNodeType[]
+  minReliability: number
+  maxHops: number
+}
+
+export interface GraphViewState {
+  selectedNodeId: string | null
+  hoveredNodeId: string | null
+  highlightSources: boolean
+  showLabels: boolean
+  layoutMode: 'force' | 'circular' | 'hierarchical'
+}
+
 export interface AppState {
   currentYear: number
   currentRegionId: string
   selectedEventTypes: EventType[]
   selectedEventId: string | null
   isEditing: boolean
-  viewMode: 'disc' | 'compare'
+  viewMode: 'disc' | 'compare' | 'graph'
 }
 
 export interface ValidationError {
