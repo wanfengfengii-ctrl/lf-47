@@ -13,12 +13,17 @@ import type {
   GraphNodeType,
   GraphSearchFilters,
   GraphViewState,
-  SourceInfo
+  SourceInfo,
+  EventPredictionAndWarning,
+  PredictionResult,
+  AnomalyDetectionResult,
+  WarningLevel
 } from '@/types'
 import {
   EVENT_TYPES,
   SOLAR_TERMS,
-  GRAPH_NODE_TYPE_INFO
+  GRAPH_NODE_TYPE_INFO,
+  WARNING_LEVEL_INFO
 } from '@/types'
 import {
   generateId,
@@ -34,7 +39,10 @@ import {
   createVersionEntry,
   canVerify,
   getWeightedAverageObservation,
-  getDominantType
+  getDominantType,
+  collectHistoricalDataPoints,
+  predictPhenologyEvent,
+  detectAnomaly
 } from '@/utils'
 
 const DEFAULT_REGIONS: Region[] = [
@@ -269,6 +277,9 @@ export const usePhenologyStore = defineStore('phenology', () => {
 
   const graphNodePositions = ref<Map<string, { x: number; y: number }>>(new Map())
 
+  const predictionsAndWarnings = ref<Map<string, EventPredictionAndWarning>>(new Map())
+  const showWarningMarkers = ref(true)
+
   function saveGraphNodePosition(nodeId: string, x: number, y: number) {
     graphNodePositions.value.set(nodeId, { x, y })
   }
@@ -280,6 +291,100 @@ export const usePhenologyStore = defineStore('phenology', () => {
   function clearGraphNodePositions() {
     graphNodePositions.value.clear()
   }
+
+  function toggleWarningMarkers(value: boolean) {
+    showWarningMarkers.value = value
+  }
+
+  function getEventPrediction(event: PhenologyEvent): PredictionResult | undefined {
+    const historicalPoints = collectHistoricalDataPoints(
+      events.value,
+      event.regionId,
+      event.name,
+      event.type,
+      event.solarTerm,
+      event.year
+    )
+    return predictPhenologyEvent(historicalPoints, event.year)
+  }
+
+  function getOrCreatePredictionAndWarning(eventId: string): EventPredictionAndWarning | undefined {
+    const event = events.value.find(e => e.id === eventId)
+    if (!event) return undefined
+
+    const cached = predictionsAndWarnings.value.get(eventId)
+    if (cached && cached.lastUpdated >= event.updatedAt) {
+      return cached
+    }
+
+    const prediction = getEventPrediction(event)
+    const anomaly = prediction ? detectAnomaly(event, prediction) : undefined
+
+    const result: EventPredictionAndWarning = {
+      eventId,
+      prediction,
+      anomaly,
+      lastUpdated: Date.now()
+    }
+    predictionsAndWarnings.value.set(eventId, result)
+    return result
+  }
+
+  function getEventWarning(eventId: string): AnomalyDetectionResult | undefined {
+    return getOrCreatePredictionAndWarning(eventId)?.anomaly
+  }
+
+  function getEventWarningLevel(eventId: string): WarningLevel {
+    const warning = getEventWarning(eventId)
+    return warning?.warningLevel || 'none'
+  }
+
+  function predictEventForYear(event: PhenologyEvent, targetYear: number): PredictionResult | undefined {
+    const historicalPoints = collectHistoricalDataPoints(
+      events.value,
+      event.regionId,
+      event.name,
+      event.type,
+      event.solarTerm
+    )
+    return predictPhenologyEvent(historicalPoints, targetYear)
+  }
+
+  function clearPredictionCache() {
+    predictionsAndWarnings.value.clear()
+  }
+
+  const warningStats = computed(() => {
+    let total = 0
+    let critical = 0
+    let high = 0
+    let medium = 0
+    let low = 0
+    let normal = 0
+
+    events.value.forEach(event => {
+      if (event.year !== state.value.currentYear) return
+      if (event.regionId !== state.value.currentRegionId) return
+      if (!state.value.selectedEventTypes.includes(event.type)) return
+      total++
+      const level = getEventWarningLevel(event.id)
+      if (level === 'critical') critical++
+      else if (level === 'high') high++
+      else if (level === 'medium') medium++
+      else if (level === 'low') low++
+      else normal++
+    })
+
+    return { total, critical, high, medium, low, normal }
+  })
+
+  const anomalousEvents = computed(() => {
+    return events.value.filter(event => {
+      if (event.year !== state.value.currentYear) return false
+      const warning = getEventWarning(event.id)
+      return warning?.hasAnomaly || false
+    })
+  })
 
   const currentRegion = computed(() =>
     regions.value.find(r => r.id === state.value.currentRegionId)!
@@ -421,6 +526,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
 
     events.value.push(newEvent)
     state.value.selectedEventId = newEvent.id
+    clearPredictionCache()
     return { success: true, event: newEvent, errors: [] }
   }
 
@@ -448,6 +554,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     event.versionHistory.push(entry)
     event.currentVersion = entry.version
 
+    clearPredictionCache()
     return { success: true, event: events.value[idx], errors: [] }
   }
 
@@ -478,6 +585,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     events.value[idx].versionHistory.push(entry)
     events.value[idx].currentVersion = entry.version
 
+    clearPredictionCache()
     return { success: true, event: events.value[idx], errors: [] }
   }
 
@@ -489,6 +597,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
         state.value.selectedEventId = null
         state.value.isEditing = false
       }
+      clearPredictionCache()
     }
   }
 
@@ -504,6 +613,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     const entry = createVersionEntry(event, 'add_source', `添加来源：${sourceRecord.sourceInfo.name}`, beforeSnapshot, '当前用户')
     event.versionHistory.push(entry)
     event.currentVersion = entry.version
+    clearPredictionCache()
   }
 
   function removeSourceRecord(eventId: string, sourceId: string) {
@@ -524,6 +634,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
       const entry = createVersionEntry(event, 'remove_source', `移除来源：${sourceName}`, beforeSnapshot, '当前用户')
       event.versionHistory.push(entry)
       event.currentVersion = entry.version
+      clearPredictionCache()
     }
   }
 
@@ -541,6 +652,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
       const entry = createVersionEntry(event, 'update_source', `更新来源：${source.sourceInfo.name}`, beforeSnapshot, '当前用户')
       event.versionHistory.push(entry)
       event.currentVersion = entry.version
+      clearPredictionCache()
     }
   }
 
@@ -559,6 +671,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     const entry = createVersionEntry(event, 'verify', '标记为已校定', beforeSnapshot, '当前用户')
     event.versionHistory.push(entry)
     event.currentVersion = entry.version
+    clearPredictionCache()
     return true
   }
 
@@ -574,6 +687,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     const entry = createVersionEntry(event, 'unverify', '取消校定', beforeSnapshot, '当前用户')
     event.versionHistory.push(entry)
     event.currentVersion = entry.version
+    clearPredictionCache()
   }
 
   function rollbackToVersion(eventId: string, targetVersion: number) {
@@ -602,6 +716,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
     const newEntry = createVersionEntry(event, 'edit', `回退到版本 v${targetVersion}`, beforeSnapshot, '当前用户')
     event.versionHistory.push(newEntry)
     event.currentVersion = newEntry.version
+    clearPredictionCache()
 
     return true
   }
@@ -691,19 +806,33 @@ export const usePhenologyStore = defineStore('phenology', () => {
         const size = 20 + (avgReliability / 100) * 15
         const nodeId = `event-${event.id}`
         const savedPos = graphNodePositions.value.get(nodeId)
+        const warning = getEventWarning(event.id)
+        const warningLevel = warning?.warningLevel || 'none'
+        const warningInfo = WARNING_LEVEL_INFO[warningLevel]
+        let nodeColor = eventTypeInfo.color
+        if (showWarningMarkers.value && warningLevel !== 'none') {
+          nodeColor = warningInfo.color
+        }
 
         nodes.push({
           id: nodeId,
           type: 'event',
           label: event.name,
           subLabel: eventTypeInfo.label,
-          description: event.description,
-          color: eventTypeInfo.color,
+          description: warning?.description || event.description,
+          color: nodeColor,
           icon: eventTypeInfo.icon,
           size,
           x: savedPos?.x,
           y: savedPos?.y,
-          data: { eventId: event.id, event }
+          data: {
+            eventId: event.id,
+            event,
+            warningLevel,
+            anomalyType: warning?.anomalyType || 'none',
+            warningInfo,
+            warning
+          }
         })
         nodeIdSet.add(nodeId)
       })
@@ -1006,9 +1135,20 @@ export const usePhenologyStore = defineStore('phenology', () => {
     graphViewState,
     graphSearchFilters,
     graphNodePositions,
+    showWarningMarkers,
+    predictionsAndWarnings,
+    warningStats,
+    anomalousEvents,
     saveGraphNodePosition,
     getGraphNodePosition,
     clearGraphNodePositions,
+    toggleWarningMarkers,
+    getEventPrediction,
+    getOrCreatePredictionAndWarning,
+    getEventWarning,
+    getEventWarningLevel,
+    predictEventForYear,
+    clearPredictionCache,
     setYear,
     setRegion,
     toggleEventType,

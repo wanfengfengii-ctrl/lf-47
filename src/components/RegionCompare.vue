@@ -98,7 +98,13 @@
                 :key="event.id"
                 class="event-bar"
                 :style="getEventBarStyle(event)"
-                :class="{ selected: store.state.selectedEventId === event.id }"
+                :class="{
+                  selected: store.state.selectedEventId === event.id,
+                  'warning-low': getEventWarningLevel(event) === 'low' && store.showWarningMarkers,
+                  'warning-medium': getEventWarningLevel(event) === 'medium' && store.showWarningMarkers,
+                  'warning-high': getEventWarningLevel(event) === 'high' && store.showWarningMarkers,
+                  'warning-critical': getEventWarningLevel(event) === 'critical' && store.showWarningMarkers
+                }"
                 @click="selectEvent(event.id)"
               >
                 <div class="event-bar-tooltip">
@@ -108,10 +114,25 @@
                   <div class="tooltip-status" :class="event.verificationStatus || 'unverified'">
                     {{ getStatusLabel(event.verificationStatus) }}
                   </div>
+                  <div
+                    v-if="store.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
+                    class="tooltip-warning"
+                    :style="{ color: getWarningLevelInfo(getEventWarningLevel(event)).color }"
+                  >
+                    {{ getAnomalyTypeInfo(getEventWarning(event.id)?.anomalyType || 'none').icon }}
+                    {{ getEventWarning(event.id)?.description }}
+                  </div>
                 </div>
                 <span v-if="getEventBarWidth(event) > 60" class="event-bar-text">
                   {{ truncateText(event.name, 6) }}
                 </span>
+                <div
+                  v-if="store.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
+                  class="event-warning-badge"
+                  :style="{ backgroundColor: getWarningLevelInfo(getEventWarningLevel(event)).color }"
+                >
+                  {{ getWarningLevelInfo(getEventWarningLevel(event)).icon }}
+                </div>
               </div>
             </div>
           </div>
@@ -120,7 +141,7 @@
     </div>
 
     <div class="compare-stats">
-      <NGrid :cols="3" :x-gap="16" :y-gap="16" responsive="screen">
+      <NGrid :cols="4" :x-gap="16" :y-gap="16" responsive="screen">
         <NGi>
           <NCard size="small" hoverable>
             <div class="stat-card">
@@ -150,6 +171,17 @@
               <div class="stat-info">
                 <div class="stat-value">{{ verifiedEvents }}</div>
                 <div class="stat-label">已校定事件</div>
+              </div>
+            </div>
+          </NCard>
+        </NGi>
+        <NGi v-if="store.showWarningMarkers">
+          <NCard size="small" hoverable>
+            <div class="stat-card">
+              <div class="stat-icon">🚨</div>
+              <div class="stat-info">
+                <div class="stat-value" :style="{ color: anomalousEventsCount > 0 ? '#ef4444' : '#10b981' }">{{ anomalousEventsCount }}</div>
+                <div class="stat-label">异常预警事件</div>
               </div>
             </div>
           </NCard>
@@ -211,8 +243,8 @@ import {
   NDivider
 } from 'naive-ui'
 import { usePhenologyStore } from '@/stores/phenology'
-import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTerm, type SolarTermKey } from '@/types'
-import { parseDate, getDayOfYear, getDaysInYear } from '@/utils'
+import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTerm, type SolarTermKey, type WarningLevel } from '@/types'
+import { parseDate, getDayOfYear, getDaysInYear, getWarningLevelInfo, getAnomalyTypeInfo } from '@/utils'
 
 const store = usePhenologyStore()
 
@@ -318,6 +350,14 @@ function getStatusLabel(status: string | undefined): string {
   return map[status || 'unverified'] || '⚠ 未校定'
 }
 
+function getEventWarningLevel(event: PhenologyEvent): WarningLevel {
+  return store.getEventWarningLevel(event.id)
+}
+
+function getEventWarning(eventId: string) {
+  return store.getEventWarning(eventId)
+}
+
 const totalEvents = computed(() => {
   return displayRegions.value.reduce((sum, r) => sum + getRegionEvents(r.id).length, 0)
 })
@@ -325,6 +365,13 @@ const totalEvents = computed(() => {
 const verifiedEvents = computed(() => {
   return displayRegions.value.reduce((sum, r) => {
     return sum + getRegionEvents(r.id).filter(e => e.verified).length
+  }, 0)
+})
+
+const anomalousEventsCount = computed(() => {
+  if (!store.showWarningMarkers) return 0
+  return displayRegions.value.reduce((sum, r) => {
+    return sum + getFilteredRegionEvents(r.id).filter(e => getEventWarningLevel(e) !== 'none').length
   }, 0)
 })
 
@@ -667,6 +714,59 @@ const floweringDifferences = computed<FloweringDiff[]>(() => {
 
 .tooltip-status.unverified {
   color: #fbbf24;
+}
+
+.tooltip-warning {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.event-warning-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: bold;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.event-bar.warning-low {
+  box-shadow: 0 0 0 2px #84cc16, 0 2px 8px rgba(132, 204, 22, 0.3);
+}
+
+.event-bar.warning-medium {
+  box-shadow: 0 0 0 2px #f59e0b, 0 2px 8px rgba(245, 158, 11, 0.4);
+}
+
+.event-bar.warning-high {
+  box-shadow: 0 0 0 2px #ef4444, 0 2px 10px rgba(239, 68, 68, 0.5);
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.event-bar.warning-critical {
+  box-shadow: 0 0 0 2px #7c3aed, 0 0 12px rgba(124, 58, 237, 0.6), 0 2px 12px rgba(239, 68, 68, 0.5);
+  animation: pulse-critical 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { box-shadow: 0 0 0 2px #ef4444, 0 2px 8px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 2px #ef4444, 0 2px 14px rgba(239, 68, 68, 0.7); }
+}
+
+@keyframes pulse-critical {
+  0%, 100% { box-shadow: 0 0 0 2px #7c3aed, 0 0 10px rgba(124, 58, 237, 0.5), 0 2px 10px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 2px #7c3aed, 0 0 18px rgba(124, 58, 237, 0.8), 0 2px 16px rgba(239, 68, 68, 0.7); }
 }
 
 .compare-stats {

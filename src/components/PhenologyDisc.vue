@@ -20,6 +20,19 @@
           <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#10b981" flood-opacity="0.3" />
           <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.15" />
         </filter>
+        <filter id="warningLowGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#84cc16" flood-opacity="0.4" />
+        </filter>
+        <filter id="warningMediumGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#f59e0b" flood-opacity="0.5" />
+        </filter>
+        <filter id="warningHighGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#ef4444" flood-opacity="0.6" />
+        </filter>
+        <filter id="warningCriticalGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#7c3aed" flood-opacity="0.7" />
+          <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#ef4444" flood-opacity="0.5" />
+        </filter>
         <linearGradient id="discGradient" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#f8fafc" />
           <stop offset="100%" stop-color="#e2e8f0" />
@@ -126,6 +139,28 @@
             {{ getStatusBadgeText(event) }}
           </text>
         </g>
+        <g
+          v-if="store.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
+          :transform="`translate(${getWarningBadgePosition(event).x}, ${getWarningBadgePosition(event).y})`"
+        >
+          <circle
+            r="7"
+            :fill="getWarningBadgeColor(event)"
+            stroke="#ffffff"
+            stroke-width="1.5"
+            pointer-events="none"
+          />
+          <text
+            text-anchor="middle"
+            dominant-baseline="middle"
+            fill="#ffffff"
+            font-size="9"
+            font-weight="bold"
+            pointer-events="none"
+          >
+            {{ getWarningBadgeText(event) }}
+          </text>
+        </g>
       </g>
 
       <g v-if="isDragging && draggingEvent">
@@ -178,6 +213,17 @@
         <circle cx="140" r="5" fill="#ef4444" />
         <text x="150" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="10">冲突中</text>
       </g>
+      <g :transform="`translate(${center}, ${center + 72})`" v-if="store.showWarningMarkers">
+        <circle r="4" fill="#84cc16" />
+        <text x="8" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="9">轻微</text>
+        <circle cx="50" r="4" fill="#f59e0b" />
+        <text x="58" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="9">中等</text>
+        <circle cx="100" r="4" fill="#ef4444" />
+        <text x="108" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="9">显著</text>
+        <circle cx="150" r="4" fill="#7c3aed" />
+        <text x="158" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="9">严重</text>
+        <text x="210" text-anchor="start" dominant-baseline="middle" fill="#94a3b8" font-size="9">物候预警等级</text>
+      </g>
     </svg>
   </div>
 </template>
@@ -185,8 +231,8 @@
 <script setup lang="ts">import { ref, computed } from 'vue';
 import { useMessage } from 'naive-ui';
 import { usePhenologyStore } from '@/stores/phenology';
-import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTermKey, type VerificationStatus } from '@/types';
-import { dayOfYearToAngle, getDayOfYear, getDaysInYear, parseDate, angleToDayOfYear, formatDate, getDateFromDayOfYear, getVerificationStatusInfo } from '@/utils';
+import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTermKey, type VerificationStatus, type WarningLevel } from '@/types'
+import { dayOfYearToAngle, getDayOfYear, getDaysInYear, parseDate, angleToDayOfYear, formatDate, getDateFromDayOfYear, getVerificationStatusInfo, getWarningLevelInfo } from '@/utils';
 const store = usePhenologyStore();
 const message = useMessage();
 const svgSize = 700;
@@ -326,26 +372,6 @@ function getEventFillColor(event: PhenologyEvent): string {
   return baseColor;
 }
 
-function getEventFilter(event: PhenologyEvent): string {
-  const status: VerificationStatus = event.verificationStatus || 'unverified';
-  if (status === 'conflict') return 'url(#conflictGlow)';
-  if (status === 'verified') return 'url(#verifiedGlow)';
-  return 'url(#shadow)';
-}
-function getEventStrokeColor(event: PhenologyEvent): string {
- const status: VerificationStatus = event.verificationStatus || 'unverified';
- if (selectedEventId.value === event.id) return '#1e293b';
- if (status === 'conflict') return '#ef4444';
- if (status === 'unverified') return '#f59e0b';
- return 'transparent';
-}
-function getEventStrokeWidth(event: PhenologyEvent): number {
- const status: VerificationStatus = event.verificationStatus || 'unverified';
- if (selectedEventId.value === event.id) return 2;
- if (status === 'conflict') return 3;
- if (status === 'unverified') return 2;
- return 0;
-}
 function getStatusBadgeColor(event: PhenologyEvent): string {
  const info = getVerificationStatusInfo(event.verificationStatus || 'unverified');
  return info.color;
@@ -355,6 +381,59 @@ function getStatusBadgeText(event: PhenologyEvent): string {
  if (status === 'verified') return '✓';
  if (status === 'conflict') return '!';
  return '?';
+}
+function getEventWarningLevel(event: PhenologyEvent): WarningLevel {
+  return store.getEventWarningLevel(event.id);
+}
+function getWarningBadgePosition(event: PhenologyEvent) {
+  const startAngle = getEventStartAngle(event);
+  const trackIdx = getEventTrackIndex(event);
+  const radius = innerRadius + 5 + trackIdx * (eventTrackWidth / 3) + (eventTrackWidth / 6) - 2;
+  return polarToCartesian(radius, startAngle + 2);
+}
+function getWarningBadgeColor(event: PhenologyEvent): string {
+  const level = getEventWarningLevel(event);
+  return getWarningLevelInfo(level).color;
+}
+function getWarningBadgeText(event: PhenologyEvent): string {
+  const level = getEventWarningLevel(event);
+  return getWarningLevelInfo(level).icon;
+}
+function getEventFilter(event: PhenologyEvent): string {
+  const status: VerificationStatus = event.verificationStatus || 'unverified';
+  const warningLevel = getEventWarningLevel(event);
+  if (store.showWarningMarkers && warningLevel !== 'none') {
+    if (warningLevel === 'critical') return 'url(#warningCriticalGlow)';
+    if (warningLevel === 'high') return 'url(#warningHighGlow)';
+    if (warningLevel === 'medium') return 'url(#warningMediumGlow)';
+    if (warningLevel === 'low') return 'url(#warningLowGlow)';
+  }
+  if (status === 'conflict') return 'url(#conflictGlow)';
+  if (status === 'verified') return 'url(#verifiedGlow)';
+  return 'url(#shadow)';
+}
+function getEventStrokeColor(event: PhenologyEvent): string {
+ const status: VerificationStatus = event.verificationStatus || 'unverified';
+ const warningLevel = getEventWarningLevel(event);
+ if (selectedEventId.value === event.id) return '#1e293b';
+ if (store.showWarningMarkers && warningLevel !== 'none') {
+   return getWarningLevelInfo(warningLevel).color;
+ }
+ if (status === 'conflict') return '#ef4444';
+ if (status === 'unverified') return '#f59e0b';
+ return 'transparent';
+}
+function getEventStrokeWidth(event: PhenologyEvent): number {
+ const status: VerificationStatus = event.verificationStatus || 'unverified';
+ const warningLevel = getEventWarningLevel(event);
+ if (selectedEventId.value === event.id) return 2;
+ if (store.showWarningMarkers && warningLevel !== 'none') {
+   if (warningLevel === 'critical' || warningLevel === 'high') return 3;
+   return 2;
+ }
+ if (status === 'conflict') return 3;
+ if (status === 'unverified') return 2;
+ return 0;
 }
 function getEventOpacity(event: PhenologyEvent): number {
  if (selectedEventId.value === event.id)

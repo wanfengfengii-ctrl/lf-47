@@ -255,3 +255,70 @@ export interface ValidationError {
   field: string
   message: string
 }
+
+export type WarningLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
+
+export type AnomalyType = 'early_start' | 'late_start' | 'shortened' | 'extended' | 'none'
+
+export interface WarningLevelInfo {
+  level: WarningLevel
+  label: string
+  color: string
+  icon: string
+}
+
+export const WARNING_LEVEL_INFO: Record<WarningLevel, WarningLevelInfo> = {
+  none: { level: 'none', label: '正常', color: '#10b981', icon: '✓' },
+  low: { level: 'low', label: '轻微异常', color: '#84cc16', icon: '!' },
+  medium: { level: 'medium', label: '中等异常', color: '#f59e0b', icon: '⚠' },
+  high: { level: 'high', label: '显著异常', color: '#ef4444', icon: '⚡' },
+  critical: { level: 'critical', label: '严重异常', color: '#7c3aed', icon: '🚨' }
+}
+
+export const ANOMALY_TYPE_INFO: Record<AnomalyType, { label: string; description: string; icon: string }> = {
+  none: { label: '无异常', description: '物候表现与历史趋势一致', icon: '✓' },
+  early_start: { label: '显著早开', description: '开始日期早于历史平均水平', icon: '⏪' },
+  late_start: { label: '晚到', description: '开始日期晚于历史平均水平', icon: '⏩' },
+  shortened: { label: '异常缩短', description: '持续天数短于历史平均水平', icon: '📉' },
+  extended: { label: '异常延长', description: '持续天数长于历史平均水平', icon: '📈' }
+}
+
+export interface HistoricalDataPoint {
+  year: number
+  startDate: string
+  dayOfYear: number
+  durationDays: number
+  reliabilityScore: number
+  sourceCount: number
+}
+
+export interface PredictionResult {
+  predictedStartDate: string
+  predictedDayOfYear: number
+  predictedDurationDays: number
+  confidence: number
+  historicalDataPoints: HistoricalDataPoint[]
+  avgStartDayOfYear: number
+  stdStartDayOfYear: number
+  avgDurationDays: number
+  stdDurationDays: number
+  dataSufficiency: 'insufficient' | 'low' | 'medium' | 'high'
+}
+
+export interface AnomalyDetectionResult {
+  hasAnomaly: boolean
+  anomalyType: AnomalyType
+  warningLevel: WarningLevel
+  startDateDeviationDays: number
+  durationDeviationPercent: number
+  startDateZScore: number
+  durationZScore: number
+  description: string
+}
+
+export interface EventPredictionAndWarning {
+  eventId: string
+  prediction?: PredictionResult
+  anomaly?: AnomalyDetectionResult
+  lastUpdated: number
+}

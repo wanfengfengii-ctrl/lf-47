@@ -69,7 +69,11 @@
               'node-group': true,
               'node-selected': isSelected(node),
               'node-highlighted': isHighlighted(node),
-              'node-dimmed': isDimmed(node)
+              'node-dimmed': isDimmed(node),
+              'node-warning-low': getNodeWarningLevel(node) === 'low' && store.showWarningMarkers,
+              'node-warning-medium': getNodeWarningLevel(node) === 'medium' && store.showWarningMarkers,
+              'node-warning-high': getNodeWarningLevel(node) === 'high' && store.showWarningMarkers,
+              'node-warning-critical': getNodeWarningLevel(node) === 'critical' && store.showWarningMarkers
             }"
             @mousedown.stop="handleNodeMouseDown($event, node)"
             @mouseenter.stop="handleNodeMouseEnter(node)"
@@ -77,11 +81,26 @@
             @click.stop="handleNodeClick(node)"
           >
             <circle
+              v-if="getNodeWarningLevel(node) !== 'none' && store.showWarningMarkers && node.type === 'event'"
+              :r="node.size + 4"
+              :fill="getNodeWarningColor(node)"
+              :opacity="0.35"
+              class="node-warning-ring"
+            />
+            <circle
               :r="node.size"
               :fill="node.color"
               :opacity="getNodeOpacity(node)"
               :filter="isSelected(node) ? 'url(#glow)' : 'url(#nodeShadow)'"
               class="node-circle"
+            />
+            <circle
+              v-if="getNodeWarningLevel(node) !== 'none' && store.showWarningMarkers && node.type === 'event'"
+              :r="node.size"
+              fill="none"
+              :stroke="getNodeWarningColor(node)"
+              stroke-width="3"
+              class="node-warning-border"
             />
             <text
               text-anchor="middle"
@@ -109,6 +128,27 @@
             >
               {{ node.subLabel }}
             </text>
+            <g
+              v-if="getNodeWarningLevel(node) !== 'none' && store.showWarningMarkers && node.type === 'event'"
+              :transform="`translate(${node.size * 0.7}, ${-node.size * 0.7})`"
+              class="node-warning-badge-group"
+            >
+              <circle
+                r="9"
+                :fill="getNodeWarningColor(node)"
+                stroke="#ffffff"
+                stroke-width="2"
+              />
+              <text
+                text-anchor="middle"
+                dominant-baseline="central"
+                fill="#ffffff"
+                font-size="10"
+                font-weight="bold"
+              >
+                {{ getNodeWarningIcon(node) }}
+              </text>
+            </g>
           </g>
         </g>
       </g>
@@ -193,8 +233,8 @@ import {
   CompressOutlined
 } from '@vicons/antd'
 import { usePhenologyStore } from '@/stores/phenology'
-import type { GraphNode, GraphEdge } from '@/types'
-import { GRAPH_EDGE_TYPE_INFO } from '@/types'
+import type { GraphNode, GraphEdge, WarningLevel } from '@/types'
+import { GRAPH_EDGE_TYPE_INFO, WARNING_LEVEL_INFO } from '@/types'
 
 const store = usePhenologyStore()
 
@@ -311,6 +351,21 @@ function isHighlighted(node: GraphNode): boolean {
 
 function isDimmed(node: GraphNode): boolean {
   return node.dim === true
+}
+
+function getNodeWarningLevel(node: GraphNode): WarningLevel {
+  if (node.type !== 'event' || !node.data) return 'none'
+  return node.data.warningLevel || 'none'
+}
+
+function getNodeWarningColor(node: GraphNode): string {
+  const level = getNodeWarningLevel(node)
+  return WARNING_LEVEL_INFO[level].color
+}
+
+function getNodeWarningIcon(node: GraphNode): string {
+  const level = getNodeWarningLevel(node)
+  return WARNING_LEVEL_INFO[level].icon
 }
 
 function handleNodeMouseDown(e: MouseEvent, node: GraphNode) {
@@ -685,6 +740,48 @@ watch(
   fill: #64748b;
   pointer-events: none;
   user-select: none;
+}
+
+.node-warning-ring {
+  pointer-events: none;
+}
+
+.node-warning-border {
+  pointer-events: none;
+}
+
+.node-warning-badge-group {
+  pointer-events: none;
+}
+
+.node-group.node-warning-high,
+.node-group.node-warning-critical {
+  animation: graph-node-pulse 2s ease-in-out infinite;
+}
+
+.node-group.node-warning-critical {
+  animation-duration: 1.2s;
+}
+
+@keyframes graph-node-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.6));
+  }
+}
+
+.node-group.node-warning-critical {
+  @keyframes graph-node-pulse-critical {
+    0%, 100% {
+      filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.4));
+    }
+    50% {
+      filter: drop-shadow(0 0 16px rgba(124, 58, 237, 0.8));
+    }
+  }
+  animation-name: graph-node-pulse-critical;
 }
 
 .graph-edge {
