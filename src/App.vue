@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN } from 'naive-ui'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useCoreStore } from '@/stores/core'
 import Toolbar from '@/components/Toolbar.vue'
 import PhenologyDisc from '@/components/PhenologyDisc.vue'
 import EventEditor from '@/components/EventEditor.vue'
@@ -61,7 +61,7 @@ const themeOverrides = {
   }
 }
 
-const store = usePhenologyStore()
+const store = useCoreStore()
 </script>
 
 <style>

@@ -70,10 +70,10 @@
               'node-selected': isSelected(node),
               'node-highlighted': isHighlighted(node),
               'node-dimmed': isDimmed(node),
-              'node-warning-low': getNodeWarningLevel(node) === 'low' && store.showWarningMarkers,
-              'node-warning-medium': getNodeWarningLevel(node) === 'medium' && store.showWarningMarkers,
-              'node-warning-high': getNodeWarningLevel(node) === 'high' && store.showWarningMarkers,
-              'node-warning-critical': getNodeWarningLevel(node) === 'critical' && store.showWarningMarkers
+              'node-warning-low': getNodeWarningLevel(node) === 'low' && predictionStore.showWarningMarkers,
+              'node-warning-medium': getNodeWarningLevel(node) === 'medium' && predictionStore.showWarningMarkers,
+              'node-warning-high': getNodeWarningLevel(node) === 'high' && predictionStore.showWarningMarkers,
+              'node-warning-critical': getNodeWarningLevel(node) === 'critical' && predictionStore.showWarningMarkers
             }"
             @mousedown.stop="handleNodeMouseDown($event, node)"
             @mouseenter.stop="handleNodeMouseEnter(node)"
@@ -81,7 +81,7 @@
             @click.stop="handleNodeClick(node)"
           >
             <circle
-              v-if="getNodeWarningLevel(node) !== 'none' && store.showWarningMarkers && node.type === 'event'"
+              v-if="getNodeWarningLevel(node) !== 'none' && predictionStore.showWarningMarkers && node.type === 'event'"
               :r="node.size + 4"
               :fill="getNodeWarningColor(node)"
               :opacity="0.35"
@@ -95,7 +95,7 @@
               class="node-circle"
             />
             <circle
-              v-if="getNodeWarningLevel(node) !== 'none' && store.showWarningMarkers && node.type === 'event'"
+              v-if="getNodeWarningLevel(node) !== 'none' && predictionStore.showWarningMarkers && node.type === 'event'"
               :r="node.size"
               fill="none"
               :stroke="getNodeWarningColor(node)"
@@ -111,7 +111,7 @@
               {{ node.icon }}
             </text>
             <text
-              v-if="store.graphViewState.showLabels"
+              v-if="graphStore.graphViewState.showLabels"
               text-anchor="middle"
               :y="node.size + 16"
               class="node-label"
@@ -120,7 +120,7 @@
               {{ node.label }}
             </text>
             <text
-              v-if="store.graphViewState.showLabels && node.subLabel"
+              v-if="graphStore.graphViewState.showLabels && node.subLabel"
               text-anchor="middle"
               :y="node.size + 30"
               class="node-sublabel"
@@ -129,7 +129,7 @@
               {{ node.subLabel }}
             </text>
             <g
-              v-if="getNodeWarningLevel(node) !== 'none' && store.showWarningMarkers && node.type === 'event'"
+              v-if="getNodeWarningLevel(node) !== 'none' && predictionStore.showWarningMarkers && node.type === 'event'"
               :transform="`translate(${node.size * 0.7}, ${-node.size * 0.7})`"
               class="node-warning-badge-group"
             >
@@ -172,19 +172,19 @@
         <span class="control-label">布局：</span>
         <NButtonGroup size="small">
           <NButton
-            :type="store.graphViewState.layoutMode === 'force' ? 'primary' : 'default'"
+            :type="graphStore.graphViewState.layoutMode === 'force' ? 'primary' : 'default'"
             @click="setLayout('force')"
           >
             力导向
           </NButton>
           <NButton
-            :type="store.graphViewState.layoutMode === 'circular' ? 'primary' : 'default'"
+            :type="graphStore.graphViewState.layoutMode === 'circular' ? 'primary' : 'default'"
             @click="setLayout('circular')"
           >
             环形
           </NButton>
           <NButton
-            :type="store.graphViewState.layoutMode === 'hierarchical' ? 'primary' : 'default'"
+            :type="graphStore.graphViewState.layoutMode === 'hierarchical' ? 'primary' : 'default'"
             @click="setLayout('hierarchical')"
           >
             层级
@@ -194,14 +194,14 @@
 
       <div class="control-group">
         <NCheckbox
-          :checked="store.graphViewState.showLabels"
-          @update:checked="store.toggleShowLabels"
+          :checked="graphStore.graphViewState.showLabels"
+          @update:checked="graphStore.toggleShowLabels"
         >
           显示标签
         </NCheckbox>
         <NCheckbox
-          :checked="store.graphViewState.highlightSources"
-          @update:checked="store.toggleHighlightSources"
+          :checked="graphStore.graphViewState.highlightSources"
+          @update:checked="graphStore.toggleHighlightSources"
         >
           高亮重要来源
         </NCheckbox>
@@ -232,11 +232,13 @@ import {
   ZoomOutOutlined,
   CompressOutlined
 } from '@vicons/antd'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useGraphStore } from '@/stores/graph'
+import { usePredictionStore } from '@/stores/prediction'
 import type { GraphNode, GraphEdge, WarningLevel } from '@/types'
 import { GRAPH_EDGE_TYPE_INFO, WARNING_LEVEL_INFO } from '@/types'
 
-const store = usePhenologyStore()
+const graphStore = useGraphStore()
+const predictionStore = usePredictionStore()
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const transform = ref({ x: 0, y: 0, scale: 1 })
@@ -245,12 +247,12 @@ const dragStart = ref({ x: 0, y: 0 })
 const draggingNode = ref<GraphNode | null>(null)
 const isSimulating = ref(false)
 
-const graphData = computed(() => store.generateGraphData())
+const graphData = computed(() => graphStore.generateGraphData())
 
 const displayNodes = computed(() => {
-  const selectedId = store.graphViewState.selectedNodeId
-  const hoveredId = store.graphViewState.hoveredNodeId
-  const highlightSources = store.graphViewState.highlightSources
+  const selectedId = graphStore.graphViewState.selectedNodeId
+  const hoveredId = graphStore.graphViewState.hoveredNodeId
+  const highlightSources = graphStore.graphViewState.highlightSources
 
   if (!selectedId && !hoveredId) {
     return graphData.value.nodes.map(node => ({
@@ -261,7 +263,7 @@ const displayNodes = computed(() => {
   }
 
   const focusId = selectedId || hoveredId
-  const neighbors = store.getNodeNeighbors(focusId!)
+  const neighbors = graphStore.getNodeNeighbors(focusId!)
   const neighborIds = new Set(neighbors.nodes.map(n => n.id))
 
   return graphData.value.nodes.map(node => {
@@ -282,8 +284,8 @@ const displayNodes = computed(() => {
 })
 
 const displayEdges = computed(() => {
-  const selectedId = store.graphViewState.selectedNodeId
-  const hoveredId = store.graphViewState.hoveredNodeId
+  const selectedId = graphStore.graphViewState.selectedNodeId
+  const hoveredId = graphStore.graphViewState.hoveredNodeId
 
   if (!selectedId && !hoveredId) {
     return graphData.value.edges.map(edge => ({
@@ -294,7 +296,7 @@ const displayEdges = computed(() => {
   }
 
   const focusId = selectedId || hoveredId
-  const neighbors = store.getNodeNeighbors(focusId!)
+  const neighbors = graphStore.getNodeNeighbors(focusId!)
   const neighborEdgeIds = new Set(neighbors.edges.map(e => e.id))
 
   return graphData.value.edges.map(edge => {
@@ -342,7 +344,7 @@ function getNodeOpacity(node: GraphNode): number {
 }
 
 function isSelected(node: GraphNode): boolean {
-  return node.id === store.graphViewState.selectedNodeId
+  return node.id === graphStore.graphViewState.selectedNodeId
 }
 
 function isHighlighted(node: GraphNode): boolean {
@@ -374,18 +376,18 @@ function handleNodeMouseDown(e: MouseEvent, node: GraphNode) {
 }
 
 function handleNodeMouseEnter(node: GraphNode) {
-  store.hoverGraphNode(node.id)
+  graphStore.hoverGraphNode(node.id)
 }
 
 function handleNodeMouseLeave() {
-  store.hoverGraphNode(null)
+  graphStore.hoverGraphNode(null)
 }
 
 function handleNodeClick(node: GraphNode) {
-  if (store.graphViewState.selectedNodeId === node.id) {
-    store.selectGraphNode(null)
+  if (graphStore.graphViewState.selectedNodeId === node.id) {
+    graphStore.selectGraphNode(null)
   } else {
-    store.selectGraphNode(node.id)
+    graphStore.selectGraphNode(node.id)
   }
 }
 
@@ -418,7 +420,7 @@ function handleSvgMouseMove(e: MouseEvent) {
 
 function handleSvgMouseUp() {
   if (draggingNode.value) {
-    store.saveGraphNodePosition(draggingNode.value.id, draggingNode.value.x || 0, draggingNode.value.y || 0)
+    graphStore.saveGraphNodePosition(draggingNode.value.id, draggingNode.value.x || 0, draggingNode.value.y || 0)
   }
   isDragging.value = false
   draggingNode.value = null
@@ -456,12 +458,12 @@ function resetView() {
 }
 
 function setLayout(mode: 'force' | 'circular' | 'hierarchical') {
-  store.setGraphViewMode(mode)
+  graphStore.setGraphViewMode(mode)
   initLayout()
 }
 
 function initLayout() {
-  const mode = store.graphViewState.layoutMode
+  const mode = graphStore.graphViewState.layoutMode
   const nodes = graphData.value.nodes
   const svg = svgRef.value
   if (!svg || nodes.length === 0) return
@@ -479,7 +481,7 @@ function initLayout() {
       node.y = centerY + Math.sin(angle) * radius
       node.vx = 0
       node.vy = 0
-      store.saveGraphNodePosition(node.id, node.x, node.y)
+      graphStore.saveGraphNodePosition(node.id, node.x, node.y)
     })
   } else if (mode === 'hierarchical') {
     const layers: Record<string, GraphNode[]> = {
@@ -506,7 +508,7 @@ function initLayout() {
         node.y = layerHeight * (nodeIdx + 1)
         node.vx = 0
         node.vy = 0
-        store.saveGraphNodePosition(node.id, node.x, node.y)
+        graphStore.saveGraphNodePosition(node.id, node.x, node.y)
       })
     })
   } else {
@@ -515,7 +517,7 @@ function initLayout() {
       node.y = centerY + (Math.random() - 0.5) * 300
       node.vx = 0
       node.vy = 0
-      store.saveGraphNodePosition(node.id, node.x, node.y)
+      graphStore.saveGraphNodePosition(node.id, node.x, node.y)
     })
     startForceSimulation()
   }
@@ -542,7 +544,7 @@ function ensureNodePositions() {
     }
   })
 
-  if (hasNewNodes && store.graphViewState.layoutMode === 'force') {
+  if (hasNewNodes && graphStore.graphViewState.layoutMode === 'force') {
     startForceSimulation()
   }
 }
@@ -635,7 +637,7 @@ function startForceSimulation() {
     if (totalVelocity < 0.5 || iterations >= maxIterations) {
       isSimulating.value = false
       nodes.forEach(node => {
-        store.saveGraphNodePosition(node.id, node.x || 0, node.y || 0)
+        graphStore.saveGraphNodePosition(node.id, node.x || 0, node.y || 0)
       })
       return
     }
@@ -671,7 +673,7 @@ onUnmounted(() => {
 })
 
 watch(
-  () => store.graphViewState.layoutMode,
+  () => graphStore.graphViewState.layoutMode,
   () => {
     setTimeout(() => initLayout(), 50)
   }

@@ -216,7 +216,7 @@ import {
   CloseOutlined,
   RightOutlined
 } from '@vicons/antd'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useGraphStore } from '@/stores/graph'
 import {
   SOLAR_TERMS,
   GRAPH_NODE_TYPE_INFO,
@@ -225,17 +225,17 @@ import {
 import type { GraphNode, PhenologyEvent, VerificationStatus } from '@/types'
 import { formatTimestamp as formatTs } from '@/utils'
 
-const store = usePhenologyStore()
+const graphStore = useGraphStore()
 
 const selectedNode = computed<GraphNode | null>(() => {
-  if (!store.graphViewState.selectedNodeId) return null
-  const graphData = store.generateGraphData()
-  return graphData.nodes.find(n => n.id === store.graphViewState.selectedNodeId) || null
+  if (!graphStore.graphViewState.selectedNodeId) return null
+  const graphData = graphStore.generateGraphData()
+  return graphData.nodes.find(n => n.id === graphStore.graphViewState.selectedNodeId) || null
 })
 
 const neighbors = computed(() => {
   if (!selectedNode.value) return { nodes: [], edges: [] }
-  return store.getNodeNeighbors(selectedNode.value.id)
+  return graphStore.getNodeNeighbors(selectedNode.value.id)
 })
 
 const neighborNodes = computed(() => {
@@ -267,7 +267,7 @@ const solarTermData = computed(() => {
 
 const relatedEvents = computed(() => {
   if (!selectedNode.value) return []
-  return store.getEventsForFilters()
+  return graphStore.getEventsForFilters()
 })
 
 function getNodeTypeLabel(type: string): string {
@@ -346,11 +346,11 @@ function formatTimestamp(ts: number): string {
 }
 
 function handleClose() {
-  store.selectGraphNode(null)
+  graphStore.selectGraphNode(null)
 }
 
 function handleJumpToNode(node: GraphNode) {
-  store.selectGraphNode(node.id)
+  graphStore.selectGraphNode(node.id)
 }
 </script>
 

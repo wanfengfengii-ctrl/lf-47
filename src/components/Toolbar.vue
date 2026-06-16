@@ -103,10 +103,10 @@ import {
 import {
   PlusOutlined
 } from '@vicons/antd'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useCoreStore } from '@/stores/core'
 import { EVENT_TYPES, type EventType } from '@/types'
 
-const store = usePhenologyStore()
+const store = useCoreStore()
 
 const currentYear = new Date().getFullYear()
 

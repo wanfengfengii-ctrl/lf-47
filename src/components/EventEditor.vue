@@ -344,7 +344,7 @@ import {
   PlusOutlined,
   EditOutlined
 } from '@vicons/antd'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useCoreStore } from '@/stores/core'
 import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SourceRecord, type EventType, type SolarTermKey } from '@/types'
 import {
   validateEvent,
@@ -360,7 +360,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import ConflictPanel from '@/components/ConflictPanel.vue'
 import VersionHistory from '@/components/VersionHistory.vue'
 
-const store = usePhenologyStore()
+const store = useCoreStore()
 const message = useMessage()
 const dialog = useDialog()
 

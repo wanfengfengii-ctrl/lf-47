@@ -2,7 +2,7 @@
   <div class="compare-view">
     <div class="compare-header">
       <h2 class="compare-title">📊 地区物候差异对比</h2>
-      <p class="compare-subtitle">{{ store.state.currentYear }} 年 · 不同地区物候事件时间差异可视化</p>
+      <p class="compare-subtitle">{{ coreStore.state.currentYear }} 年 · 不同地区物候事件时间差异可视化</p>
     </div>
 
     <div class="compare-controls">
@@ -10,7 +10,7 @@
         <span class="selector-label">选择对比地区（最多 4 个）：</span>
         <div class="region-chips">
           <NTag
-            v-for="region in store.regions"
+            v-for="region in coreStore.regions"
             :key="region.id"
             :type="selectedRegions.includes(region.id) ? 'primary' : 'default'"
             :checkable="true"
@@ -99,11 +99,11 @@
                 class="event-bar"
                 :style="getEventBarStyle(event)"
                 :class="{
-                  selected: store.state.selectedEventId === event.id,
-                  'warning-low': getEventWarningLevel(event) === 'low' && store.showWarningMarkers,
-                  'warning-medium': getEventWarningLevel(event) === 'medium' && store.showWarningMarkers,
-                  'warning-high': getEventWarningLevel(event) === 'high' && store.showWarningMarkers,
-                  'warning-critical': getEventWarningLevel(event) === 'critical' && store.showWarningMarkers
+                  selected: coreStore.state.selectedEventId === event.id,
+                  'warning-low': getEventWarningLevel(event) === 'low' && predictionStore.showWarningMarkers,
+                  'warning-medium': getEventWarningLevel(event) === 'medium' && predictionStore.showWarningMarkers,
+                  'warning-high': getEventWarningLevel(event) === 'high' && predictionStore.showWarningMarkers,
+                  'warning-critical': getEventWarningLevel(event) === 'critical' && predictionStore.showWarningMarkers
                 }"
                 @click="selectEvent(event.id)"
               >
@@ -115,7 +115,7 @@
                     {{ getStatusLabel(event.verificationStatus) }}
                   </div>
                   <div
-                    v-if="store.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
+                    v-if="predictionStore.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
                     class="tooltip-warning"
                     :style="{ color: getWarningLevelInfo(getEventWarningLevel(event)).color }"
                   >
@@ -127,7 +127,7 @@
                   {{ truncateText(event.name, 6) }}
                 </span>
                 <div
-                  v-if="store.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
+                  v-if="predictionStore.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
                   class="event-warning-badge"
                   :style="{ backgroundColor: getWarningLevelInfo(getEventWarningLevel(event)).color }"
                 >
@@ -175,7 +175,7 @@
             </div>
           </NCard>
         </NGi>
-        <NGi v-if="store.showWarningMarkers">
+        <NGi v-if="predictionStore.showWarningMarkers">
           <NCard size="small" hoverable>
             <div class="stat-card">
               <div class="stat-icon">🚨</div>
@@ -242,11 +242,13 @@ import {
   NGi,
   NDivider
 } from 'naive-ui'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useCoreStore } from '@/stores/core'
+import { usePredictionStore } from '@/stores/prediction'
 import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTerm, type SolarTermKey, type WarningLevel } from '@/types'
 import { parseDate, getDayOfYear, getDaysInYear, getWarningLevelInfo, getAnomalyTypeInfo } from '@/utils'
 
-const store = usePhenologyStore()
+const coreStore = useCoreStore()
+const predictionStore = usePredictionStore()
 
 const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const monthWidth = 100 / 12
@@ -254,7 +256,7 @@ const monthWidth = 100 / 12
 const selectedRegions = ref<string[]>(['beijing', 'shanghai', 'guangzhou'])
 
 const displayRegions = computed(() => {
-  return store.regions.filter(r => selectedRegions.value.includes(r.id))
+  return coreStore.regions.filter(r => selectedRegions.value.includes(r.id))
 })
 
 const groupedSolarTerms = computed(() => {
@@ -266,7 +268,7 @@ const groupedSolarTerms = computed(() => {
 })
 
 function getSolarTermPosition(term: SolarTerm): number {
-  const year = store.state.currentYear
+  const year = coreStore.state.currentYear
   const date = new Date(year, term.month - 1, term.day)
   const dayOfYear = getDayOfYear(date)
   const totalDays = getDaysInYear(year)
@@ -292,17 +294,17 @@ function toggleRegion(regionId: string) {
 }
 
 function getRegionEvents(regionId: string): PhenologyEvent[] {
-  return store.compareEvents.filter(e => e.regionId === regionId)
+  return coreStore.compareEvents.filter(e => e.regionId === regionId)
 }
 
 function getFilteredRegionEvents(regionId: string): PhenologyEvent[] {
   return getRegionEvents(regionId).filter(e =>
-    store.state.selectedEventTypes.includes(e.type)
+    coreStore.state.selectedEventTypes.includes(e.type)
   )
 }
 
 function getEventBarStyle(event: PhenologyEvent) {
-  const year = store.state.currentYear
+  const year = coreStore.state.currentYear
   const totalDays = getDaysInYear(year)
   const startDay = getDayOfYear(parseDate(event.startDate))
   const left = (startDay / totalDays) * 100
@@ -318,7 +320,7 @@ function getEventBarStyle(event: PhenologyEvent) {
 }
 
 function getEventBarWidth(event: PhenologyEvent): number {
-  const year = store.state.currentYear
+  const year = coreStore.state.currentYear
   const totalDays = getDaysInYear(year)
   return (Math.min(event.durationDays, totalDays) / totalDays) * 100 * 10
 }
@@ -333,12 +335,12 @@ function truncateText(text: string, maxLen: number): string {
 }
 
 function selectEvent(eventId: string) {
-  const event = store.events.find(e => e.id === eventId)
+  const event = coreStore.events.find(e => e.id === eventId)
   if (event) {
-    store.setRegion(event.regionId)
+    coreStore.setRegion(event.regionId)
   }
-  store.selectEvent(eventId)
-  store.setViewMode('disc')
+  coreStore.selectEvent(eventId)
+  coreStore.setViewMode('disc')
 }
 
 function getStatusLabel(status: string | undefined): string {
@@ -351,11 +353,11 @@ function getStatusLabel(status: string | undefined): string {
 }
 
 function getEventWarningLevel(event: PhenologyEvent): WarningLevel {
-  return store.getEventWarningLevel(event.id)
+  return predictionStore.getEventWarningLevel(event.id)
 }
 
 function getEventWarning(eventId: string) {
-  return store.getEventWarning(eventId)
+  return predictionStore.getEventWarning(eventId)
 }
 
 const totalEvents = computed(() => {
@@ -369,7 +371,7 @@ const verifiedEvents = computed(() => {
 })
 
 const anomalousEventsCount = computed(() => {
-  if (!store.showWarningMarkers) return 0
+  if (!predictionStore.showWarningMarkers) return 0
   return displayRegions.value.reduce((sum, r) => {
     return sum + getFilteredRegionEvents(r.id).filter(e => getEventWarningLevel(e) !== 'none').length
   }, 0)
@@ -409,7 +411,7 @@ const floweringDifferences = computed<FloweringDiff[]>(() => {
     .filter(([_, events]) => events.length >= 2)
     .forEach(([name, events]) => {
       const items: FloweringDiffItem[] = events.map(e => ({
-        region: store.regions.find(r => r.id === e.regionId)?.name || e.regionId,
+        region: coreStore.regions.find(r => r.id === e.regionId)?.name || e.regionId,
         date: e.startDate,
         dayOfYear: getDayOfYear(parseDate(e.startDate)),
         width: 0

@@ -140,7 +140,7 @@
           </text>
         </g>
         <g
-          v-if="store.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
+          v-if="predictionStore.showWarningMarkers && getEventWarningLevel(event) !== 'none'"
           :transform="`translate(${getWarningBadgePosition(event).x}, ${getWarningBadgePosition(event).y})`"
         >
           <circle
@@ -183,7 +183,7 @@
         font-size="20"
         font-weight="700"
       >
-        {{ store.state.currentYear }}年
+        {{ coreStore.state.currentYear }}年
       </text>
       <text
         :x="center"
@@ -193,7 +193,7 @@
         fill="#64748b"
         font-size="13"
       >
-        {{ store.currentRegion.name }}
+        {{ coreStore.currentRegion.name }}
       </text>
       <text
         :x="center"
@@ -213,7 +213,7 @@
         <circle cx="140" r="5" fill="#ef4444" />
         <text x="150" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="10">冲突中</text>
       </g>
-      <g :transform="`translate(${center}, ${center + 72})`" v-if="store.showWarningMarkers">
+      <g :transform="`translate(${center}, ${center + 72})`" v-if="predictionStore.showWarningMarkers">
         <circle r="4" fill="#84cc16" />
         <text x="8" text-anchor="start" dominant-baseline="middle" fill="#64748b" font-size="9">轻微</text>
         <circle cx="50" r="4" fill="#f59e0b" />
@@ -230,10 +230,12 @@
 
 <script setup lang="ts">import { ref, computed } from 'vue';
 import { useMessage } from 'naive-ui';
-import { usePhenologyStore } from '@/stores/phenology';
+import { useCoreStore } from '@/stores/core';
+import { usePredictionStore } from '@/stores/prediction';
 import { SOLAR_TERMS, EVENT_TYPES, type PhenologyEvent, type SolarTermKey, type VerificationStatus, type WarningLevel } from '@/types'
 import { dayOfYearToAngle, getDayOfYear, getDaysInYear, parseDate, angleToDayOfYear, formatDate, getDateFromDayOfYear, getVerificationStatusInfo, getWarningLevelInfo } from '@/utils';
-const store = usePhenologyStore();
+const coreStore = useCoreStore();
+const predictionStore = usePredictionStore();
 const message = useMessage();
 const svgSize = 700;
 const center = svgSize / 2;
@@ -248,10 +250,10 @@ const dragCurrentAngle = ref(0);
 const draggingEvent = computed(() => {
  if (!draggingEventId.value)
  return null;
- return store.events.find(e => e.id === draggingEventId.value) || null;
+ return coreStore.events.find(e => e.id === draggingEventId.value) || null;
 });
-const selectedEventId = computed(() => store.state.selectedEventId);
-const filteredEvents = computed(() => store.filteredEvents);
+const selectedEventId = computed(() => coreStore.state.selectedEventId);
+const filteredEvents = computed(() => coreStore.filteredEvents);
 function polarToCartesian(radius: number, angleDeg: number) {
  const angleRad = (angleDeg - 90) * Math.PI / 180;
  return {
@@ -327,7 +329,7 @@ function getEventEndAngle(event: PhenologyEvent): number {
  return dayOfYearToAngle(endDay, event.year);
 }
 function getEventTrackIndex(event: PhenologyEvent): number {
- const sameTermEvents = store.getEventsForSolarTerm(event.solarTerm);
+ const sameTermEvents = coreStore.getEventsForSolarTerm(event.solarTerm);
  return sameTermEvents.findIndex(e => e.id === event.id) % 3;
 }
 function getEventArcPath(event: PhenologyEvent) {
@@ -383,7 +385,7 @@ function getStatusBadgeText(event: PhenologyEvent): string {
  return '?';
 }
 function getEventWarningLevel(event: PhenologyEvent): WarningLevel {
-  return store.getEventWarningLevel(event.id);
+  return predictionStore.getEventWarningLevel(event.id);
 }
 function getWarningBadgePosition(event: PhenologyEvent) {
   const startAngle = getEventStartAngle(event);
@@ -402,7 +404,7 @@ function getWarningBadgeText(event: PhenologyEvent): string {
 function getEventFilter(event: PhenologyEvent): string {
   const status: VerificationStatus = event.verificationStatus || 'unverified';
   const warningLevel = getEventWarningLevel(event);
-  if (store.showWarningMarkers && warningLevel !== 'none') {
+  if (predictionStore.showWarningMarkers && warningLevel !== 'none') {
     if (warningLevel === 'critical') return 'url(#warningCriticalGlow)';
     if (warningLevel === 'high') return 'url(#warningHighGlow)';
     if (warningLevel === 'medium') return 'url(#warningMediumGlow)';
@@ -416,7 +418,7 @@ function getEventStrokeColor(event: PhenologyEvent): string {
  const status: VerificationStatus = event.verificationStatus || 'unverified';
  const warningLevel = getEventWarningLevel(event);
  if (selectedEventId.value === event.id) return '#1e293b';
- if (store.showWarningMarkers && warningLevel !== 'none') {
+ if (predictionStore.showWarningMarkers && warningLevel !== 'none') {
    return getWarningLevelInfo(warningLevel).color;
  }
  if (status === 'conflict') return '#ef4444';
@@ -427,7 +429,7 @@ function getEventStrokeWidth(event: PhenologyEvent): number {
  const status: VerificationStatus = event.verificationStatus || 'unverified';
  const warningLevel = getEventWarningLevel(event);
  if (selectedEventId.value === event.id) return 2;
- if (store.showWarningMarkers && warningLevel !== 'none') {
+ if (predictionStore.showWarningMarkers && warningLevel !== 'none') {
    if (warningLevel === 'critical' || warningLevel === 'high') return 3;
    return 2;
  }
@@ -489,11 +491,11 @@ function handleMouseUp() {
  const offsetAngle = dragCurrentAngle.value - dragStartAngle.value;
  const origStart = getEventStartAngle(draggingEvent.value);
  const newStartAngle = ((origStart + offsetAngle) % 360 + 360) % 360;
- const year = store.state.currentYear;
+ const year = coreStore.state.currentYear;
  const newDayOfYear = angleToDayOfYear(newStartAngle, year);
  const newDate = getDateFromDayOfYear(newDayOfYear, year);
  const newDateStr = formatDate(newDate);
- store.moveEvent(draggingEventId.value, newDateStr);
+ coreStore.moveEvent(draggingEventId.value, newDateStr);
  resetDragState();
 }
 function resetDragState() {
@@ -504,13 +506,13 @@ function resetDragState() {
 }
 function handleEventClick(eventId: string) {
  if (!isDragging.value) {
- store.selectEvent(eventId);
+ coreStore.selectEvent(eventId);
  }
 }
 function handleSolarTermClick(solarTerm: SolarTermKey) {
- const termEvents = store.getEventsForSolarTerm(solarTerm);
+ const termEvents = coreStore.getEventsForSolarTerm(solarTerm);
  if (termEvents.length > 0) {
-   store.selectEvent(termEvents[0].id);
+   coreStore.selectEvent(termEvents[0].id);
  } else {
    const term = SOLAR_TERMS.find(t => t.key === solarTerm);
    message.info(`「${term?.name}」节气下暂无物候事件，点击"新建事件"添加`);

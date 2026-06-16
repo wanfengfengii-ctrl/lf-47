@@ -64,11 +64,11 @@
       <div class="filter-section">
         <div class="filter-title">
           <span>地区</span>
-          <span class="filter-count">{{ selectedRegionCount }}/{{ store.regions.length }}</span>
+          <span class="filter-count">{{ selectedRegionCount }}/{{ coreStore.regions.length }}</span>
         </div>
         <div class="filter-options">
           <div
-            v-for="region in store.regions"
+            v-for="region in coreStore.regions"
             :key="region.id"
             class="filter-chip"
             :class="{ active: isRegionSelected(region.id) }"
@@ -101,10 +101,10 @@
       <div class="filter-section">
         <div class="filter-title">
           <span>最低可信度</span>
-          <span class="filter-value">{{ store.graphSearchFilters.minReliability }}%</span>
+          <span class="filter-value">{{ graphStore.graphSearchFilters.minReliability }}%</span>
         </div>
         <NSlider
-          :value="store.graphSearchFilters.minReliability"
+          :value="graphStore.graphSearchFilters.minReliability"
           :min="0"
           :max="100"
           :step="10"
@@ -116,10 +116,10 @@
       <div class="filter-section">
         <div class="filter-title">
           <span>关联层级</span>
-          <span class="filter-value">{{ store.graphSearchFilters.maxHops }} 度</span>
+          <span class="filter-value">{{ graphStore.graphSearchFilters.maxHops }} 度</span>
         </div>
         <NSlider
-          :value="store.graphSearchFilters.maxHops"
+          :value="graphStore.graphSearchFilters.maxHops"
           :min="1"
           :max="4"
           :step="1"
@@ -150,13 +150,15 @@ import {
   SearchOutlined,
   ReloadOutlined
 } from '@vicons/antd'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useGraphStore } from '@/stores/graph'
+import { useCoreStore } from '@/stores/core'
 import { EVENT_TYPES, SOLAR_TERMS, GRAPH_NODE_TYPE_INFO } from '@/types'
 import type { GraphNodeType, EventType, SolarTermKey } from '@/types'
 
-const store = usePhenologyStore()
+const graphStore = useGraphStore()
+const coreStore = useCoreStore()
 
-const keywordInput = ref(store.graphSearchFilters.keyword)
+const keywordInput = ref(graphStore.graphSearchFilters.keyword)
 
 const nodeTypeOptions = computed(() => {
   return (Object.keys(GRAPH_NODE_TYPE_INFO) as GraphNodeType[]).map(key => ({
@@ -165,10 +167,10 @@ const nodeTypeOptions = computed(() => {
   }))
 })
 
-const selectedRegionCount = computed(() => store.graphSearchFilters.regionIds.length)
-const selectedTermCount = computed(() => store.graphSearchFilters.solarTermKeys.length)
+const selectedRegionCount = computed(() => graphStore.graphSearchFilters.regionIds.length)
+const selectedTermCount = computed(() => graphStore.graphSearchFilters.solarTermKeys.length)
 
-const filteredCount = computed(() => store.getEventsForFilters().length)
+const filteredCount = computed(() => graphStore.getEventsForFilters().length)
 
 const reliabilityMarks = {
   0: '0%',
@@ -186,52 +188,52 @@ const hopMarks = {
 }
 
 function isNodeTypeSelected(type: GraphNodeType): boolean {
-  return store.graphSearchFilters.nodeTypes.includes(type)
+  return graphStore.graphSearchFilters.nodeTypes.includes(type)
 }
 
 function isEventTypeSelected(type: EventType): boolean {
-  return store.graphSearchFilters.eventTypes.includes(type)
+  return graphStore.graphSearchFilters.eventTypes.includes(type)
 }
 
 function isRegionSelected(regionId: string): boolean {
-  return store.graphSearchFilters.regionIds.includes(regionId)
+  return graphStore.graphSearchFilters.regionIds.includes(regionId)
 }
 
 function isSolarTermSelected(termKey: SolarTermKey): boolean {
-  return store.graphSearchFilters.solarTermKeys.includes(termKey)
+  return graphStore.graphSearchFilters.solarTermKeys.includes(termKey)
 }
 
 function handleKeywordChange(value: string) {
-  store.setGraphKeyword(value)
+  graphStore.setGraphKeyword(value)
 }
 
 function handleToggleNodeType(type: GraphNodeType) {
-  store.toggleGraphNodeType(type)
+  graphStore.toggleGraphNodeType(type)
 }
 
 function handleToggleEventType(type: EventType) {
-  store.toggleGraphEventType(type)
+  graphStore.toggleGraphEventType(type)
 }
 
 function handleToggleRegion(regionId: string) {
-  store.toggleGraphRegion(regionId)
+  graphStore.toggleGraphRegion(regionId)
 }
 
 function handleToggleSolarTerm(termKey: SolarTermKey) {
-  store.toggleGraphSolarTerm(termKey)
+  graphStore.toggleGraphSolarTerm(termKey)
 }
 
 function handleReliabilityChange(value: number) {
-  store.setMinReliability(value)
+  graphStore.setMinReliability(value)
 }
 
 function handleHopsChange(value: number) {
-  store.setMaxHops(value)
+  graphStore.setMaxHops(value)
 }
 
 function handleReset() {
   keywordInput.value = ''
-  store.resetGraphFilters()
+  graphStore.resetGraphFilters()
 }
 </script>
 

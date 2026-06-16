@@ -159,7 +159,7 @@ import {
   NButton,
   NText
 } from 'naive-ui'
-import { usePhenologyStore } from '@/stores/phenology'
+import { useCoreStore } from '@/stores/core'
 import type { PhenologyEvent } from '@/types'
 import {
   sortSourcesByReliability,
@@ -169,7 +169,7 @@ import {
   getDominantType
 } from '@/utils'
 
-const store = usePhenologyStore()
+const store = useCoreStore()
 
 const props = defineProps<{
   event: PhenologyEvent | null
