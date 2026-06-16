@@ -267,6 +267,20 @@ export const usePhenologyStore = defineStore('phenology', () => {
     maxHops: 2
   })
 
+  const graphNodePositions = ref<Map<string, { x: number; y: number }>>(new Map())
+
+  function saveGraphNodePosition(nodeId: string, x: number, y: number) {
+    graphNodePositions.value.set(nodeId, { x, y })
+  }
+
+  function getGraphNodePosition(nodeId: string): { x: number; y: number } | undefined {
+    return graphNodePositions.value.get(nodeId)
+  }
+
+  function clearGraphNodePositions() {
+    graphNodePositions.value.clear()
+  }
+
   const currentRegion = computed(() =>
     regions.value.find(r => r.id === state.value.currentRegionId)!
   )
@@ -335,9 +349,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
   function setViewMode(mode: 'disc' | 'compare' | 'graph') {
     state.value.viewMode = mode
     if (mode === 'graph') {
-      state.value.selectedEventId = null
       state.value.isEditing = false
-      resetGraphFilters()
     } else {
       selectGraphNode(null)
       hoverGraphNode(null)
@@ -626,12 +638,20 @@ export const usePhenologyStore = defineStore('phenology', () => {
       if (graphSearchFilters.keyword) {
         const keyword = graphSearchFilters.keyword.toLowerCase()
         const matchName = e.name.toLowerCase().includes(keyword)
-        const matchDesc = e.description?.toLowerCase().includes(keyword)
+        const matchDesc = e.description?.toLowerCase().includes(keyword) || false
         const matchSource = e.sources.some(s =>
           s.sourceInfo.name.toLowerCase().includes(keyword) ||
-          s.sourceInfo.note?.toLowerCase().includes(keyword)
+          (s.sourceInfo.note?.toLowerCase().includes(keyword) || false)
         )
-        if (!matchName && !matchDesc && !matchSource) {
+        const region = regions.value.find(r => r.id === e.regionId)
+        const matchRegion = region ? (
+          region.name.toLowerCase().includes(keyword) ||
+          region.province.toLowerCase().includes(keyword) ||
+          region.climateZone.toLowerCase().includes(keyword)
+        ) : false
+        const term = SOLAR_TERMS.find(t => t.key === e.solarTerm)
+        const matchSolarTerm = term ? term.name.toLowerCase().includes(keyword) : false
+        if (!matchName && !matchDesc && !matchSource && !matchRegion && !matchSolarTerm) {
           return false
         }
       }
@@ -669,9 +689,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
           ? event.sources.reduce((sum, s) => sum + s.reliabilityScore, 0) / event.sources.length
           : 50
         const size = 20 + (avgReliability / 100) * 15
+        const nodeId = `event-${event.id}`
+        const savedPos = graphNodePositions.value.get(nodeId)
 
         nodes.push({
-          id: `event-${event.id}`,
+          id: nodeId,
           type: 'event',
           label: event.name,
           subLabel: eventTypeInfo.label,
@@ -679,9 +701,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
           color: eventTypeInfo.color,
           icon: eventTypeInfo.icon,
           size,
+          x: savedPos?.x,
+          y: savedPos?.y,
           data: { eventId: event.id, event }
         })
-        nodeIdSet.add(`event-${event.id}`)
+        nodeIdSet.add(nodeId)
       })
     }
 
@@ -690,9 +714,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
         const term = SOLAR_TERMS.find(t => t.key === termKey)!
         const eventCount = filteredEventsList.filter(e => e.solarTerm === termKey).length
         const size = 18 + Math.min(eventCount * 3, 15)
+        const nodeId = `solarTerm-${termKey}`
+        const savedPos = graphNodePositions.value.get(nodeId)
 
         nodes.push({
-          id: `solarTerm-${termKey}`,
+          id: nodeId,
           type: 'solarTerm',
           label: term.name,
           subLabel: `${term.month}月${term.day}日`,
@@ -700,9 +726,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
           color: GRAPH_NODE_TYPE_INFO.solarTerm.color,
           icon: GRAPH_NODE_TYPE_INFO.solarTerm.icon,
           size,
+          x: savedPos?.x,
+          y: savedPos?.y,
           data: { solarTermKey: termKey, term }
         })
-        nodeIdSet.add(`solarTerm-${termKey}`)
+        nodeIdSet.add(nodeId)
       })
     }
 
@@ -712,9 +740,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
         if (!region) return
         const eventCount = filteredEventsList.filter(e => e.regionId === regionId).length
         const size = 18 + Math.min(eventCount * 3, 15)
+        const nodeId = `region-${regionId}`
+        const savedPos = graphNodePositions.value.get(nodeId)
 
         nodes.push({
-          id: `region-${regionId}`,
+          id: nodeId,
           type: 'region',
           label: region.name,
           subLabel: region.province,
@@ -722,9 +752,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
           color: GRAPH_NODE_TYPE_INFO.region.color,
           icon: GRAPH_NODE_TYPE_INFO.region.icon,
           size,
+          x: savedPos?.x,
+          y: savedPos?.y,
           data: { regionId, region }
         })
-        nodeIdSet.add(`region-${regionId}`)
+        nodeIdSet.add(nodeId)
       })
     }
 
@@ -740,9 +772,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
             }, 0) / citingEvents.length
           : 50
         const size = 16 + Math.min(citingEvents.length * 2, 12)
+        const nodeId = `source-${sourceId}`
+        const savedPos = graphNodePositions.value.get(nodeId)
 
         nodes.push({
-          id: `source-${sourceId}`,
+          id: nodeId,
           type: 'source',
           label: sourceInfo.name,
           subLabel: sourceInfo.type,
@@ -750,9 +784,11 @@ export const usePhenologyStore = defineStore('phenology', () => {
           color: GRAPH_NODE_TYPE_INFO.source.color,
           icon: GRAPH_NODE_TYPE_INFO.source.icon,
           size,
+          x: savedPos?.x,
+          y: savedPos?.y,
           data: { sourceId, sourceInfo, reliabilityScore: avgReliability }
         })
-        nodeIdSet.add(`source-${sourceId}`)
+        nodeIdSet.add(nodeId)
       })
     }
 
@@ -877,6 +913,7 @@ export const usePhenologyStore = defineStore('phenology', () => {
 
   function setGraphViewMode(mode: 'force' | 'circular' | 'hierarchical') {
     graphViewState.layoutMode = mode
+    clearGraphNodePositions()
   }
 
   function selectGraphNode(nodeId: string | null) {
@@ -968,6 +1005,10 @@ export const usePhenologyStore = defineStore('phenology', () => {
     compareEvents,
     graphViewState,
     graphSearchFilters,
+    graphNodePositions,
+    saveGraphNodePosition,
+    getGraphNodePosition,
+    clearGraphNodePositions,
     setYear,
     setRegion,
     toggleEventType,

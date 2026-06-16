@@ -362,6 +362,9 @@ function handleSvgMouseMove(e: MouseEvent) {
 }
 
 function handleSvgMouseUp() {
+  if (draggingNode.value) {
+    store.saveGraphNodePosition(draggingNode.value.id, draggingNode.value.x || 0, draggingNode.value.y || 0)
+  }
   isDragging.value = false
   draggingNode.value = null
 }
@@ -421,6 +424,7 @@ function initLayout() {
       node.y = centerY + Math.sin(angle) * radius
       node.vx = 0
       node.vy = 0
+      store.saveGraphNodePosition(node.id, node.x, node.y)
     })
   } else if (mode === 'hierarchical') {
     const layers: Record<string, GraphNode[]> = {
@@ -447,6 +451,7 @@ function initLayout() {
         node.y = layerHeight * (nodeIdx + 1)
         node.vx = 0
         node.vy = 0
+        store.saveGraphNodePosition(node.id, node.x, node.y)
       })
     })
   } else {
@@ -455,7 +460,34 @@ function initLayout() {
       node.y = centerY + (Math.random() - 0.5) * 300
       node.vx = 0
       node.vy = 0
+      store.saveGraphNodePosition(node.id, node.x, node.y)
     })
+    startForceSimulation()
+  }
+}
+
+function ensureNodePositions() {
+  const nodes = graphData.value.nodes
+  const svg = svgRef.value
+  if (!svg || nodes.length === 0) return
+
+  const width = svg.clientWidth
+  const height = svg.clientHeight
+  const centerX = width / 2
+  const centerY = height / 2
+
+  let hasNewNodes = false
+  nodes.forEach(node => {
+    if (node.x === undefined || node.y === undefined) {
+      node.x = centerX + (Math.random() - 0.5) * 200
+      node.y = centerY + (Math.random() - 0.5) * 200
+      node.vx = (Math.random() - 0.5) * 2
+      node.vy = (Math.random() - 0.5) * 2
+      hasNewNodes = true
+    }
+  })
+
+  if (hasNewNodes && store.graphViewState.layoutMode === 'force') {
     startForceSimulation()
   }
 }
@@ -547,6 +579,9 @@ function startForceSimulation() {
 
     if (totalVelocity < 0.5 || iterations >= maxIterations) {
       isSimulating.value = false
+      nodes.forEach(node => {
+        store.saveGraphNodePosition(node.id, node.x || 0, node.y || 0)
+      })
       return
     }
 
@@ -581,11 +616,17 @@ onUnmounted(() => {
 })
 
 watch(
-  () => [store.graphSearchFilters, store.state.currentYear],
+  () => store.graphViewState.layoutMode,
   () => {
     setTimeout(() => initLayout(), 50)
-  },
-  { deep: true }
+  }
+)
+
+watch(
+  () => graphData.value.nodes.length,
+  () => {
+    setTimeout(() => ensureNodePositions(), 50)
+  }
 )
 </script>
 
